@@ -1,8 +1,7 @@
 #include <QApplication>
 #include <QPushButton>
 #include <QQmlApplicationEngine>
-#include <QtQuick>
-#include <QUrl>
+
 
 int main(int argc, char *argv[]) {
     QApplication a(argc, argv);

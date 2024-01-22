@@ -11,6 +11,9 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
+# build statically linked binary
+
+
 set(CMAKE_PREFIX_PATH "${Qt6_DIR}")
 set(PROJECT "SensitiveDataDeleter")
 
@@ -20,6 +23,7 @@ find_package(Qt6 COMPONENTS
         Widgets
         Qml
         Quick
+        QuickControls2
         REQUIRED)
 
 qt6_add_resources(QT_RESOURCES qml.qrc)
@@ -31,5 +35,6 @@ target_link_libraries(${PROJECT}
         Qt::Widgets
         Qt::Qml
         Qt::Quick
+        Qt::QuickControls2
         )
 
