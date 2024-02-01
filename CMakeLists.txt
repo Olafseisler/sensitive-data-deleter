@@ -28,7 +28,7 @@ find_package(Qt6 COMPONENTS
 
 qt6_add_resources(QT_RESOURCES qml.qrc)
 
-add_executable(${PROJECT} main.cpp ${QT_RESOURCES})
+add_executable(${PROJECT} main.cpp ${QT_RESOURCES} treeitem.cpp treemodel.cpp)
 target_link_libraries(${PROJECT}
         Qt::Core
         Qt::Gui
