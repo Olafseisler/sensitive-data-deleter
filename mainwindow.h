@@ -7,6 +7,7 @@
 
 #include <QMainWindow>
 #include <QTreeWidget>
+#include <QTableWidget>
 #include <QFileSystemWatcher>
 
 #include "ui_mainwindow.h"
@@ -27,7 +28,10 @@ private slots:
 
 private:
     QTreeWidget *fileTreeWidget;
-    QTableView *flaggedFilesTableView;
+    QTreeWidget *flaggedFilesTreeWidget;
+    QTableWidget *fileTypesTableWidget;
+    QTableWidget *scanPatternsTableWidget;
+
     QFileSystemWatcher *watcher;
 
     void setupTreeWidget();

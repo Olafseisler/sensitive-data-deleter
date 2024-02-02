@@ -34,13 +34,16 @@
       </property>
       <widget class="QWidget" name="tab_3">
        <attribute name="title">
-        <string>Tab 1</string>
+        <string>Scan &amp;&amp; Delete</string>
        </attribute>
        <layout class="QVBoxLayout" name="verticalLayout_5">
         <item>
          <layout class="QHBoxLayout" name="horizontalLayout_4">
           <item>
-           <layout class="QVBoxLayout" name="verticalLayout_3">
+           <layout class="QVBoxLayout" name="verticalLayout_3" stretch="1,0">
+            <property name="spacing">
+             <number>1</number>
+            </property>
             <item>
              <widget class="QTreeWidget" name="fileTreeWidget">
               <property name="sizePolicy">
@@ -55,9 +58,30 @@
                 <height>200</height>
                </size>
               </property>
+              <property name="baseSize">
+               <size>
+                <width>60</width>
+                <height>30</height>
+               </size>
+              </property>
               <column>
                <property name="text">
-                <string notr="true">1</string>
+                <string notr="true">Name</string>
+               </property>
+              </column>
+              <column>
+               <property name="text">
+                <string>Size</string>
+               </property>
+              </column>
+              <column>
+               <property name="text">
+                <string>Last Modified</string>
+               </property>
+              </column>
+              <column>
+               <property name="text">
+                <string/>
                </property>
               </column>
              </widget>
@@ -144,9 +168,12 @@
            </layout>
           </item>
           <item>
-           <layout class="QVBoxLayout" name="verticalLayout_4">
+           <layout class="QVBoxLayout" name="verticalLayout_4" stretch="1,0">
+            <property name="spacing">
+             <number>1</number>
+            </property>
             <item>
-             <widget class="QTableView" name="flaggedFilesTableView">
+             <widget class="QTreeWidget" name="flaggedFilesTreeWidget">
               <property name="sizePolicy">
                <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
                 <horstretch>1</horstretch>
@@ -165,15 +192,31 @@
                 <height>30</height>
                </size>
               </property>
+              <column>
+               <property name="text">
+                <string>1</string>
+               </property>
+              </column>
+              <column>
+               <property name="text">
+                <string>Flagged Files</string>
+               </property>
+              </column>
              </widget>
             </item>
             <item>
              <layout class="QHBoxLayout" name="horizontalLayout_3">
               <property name="spacing">
-               <number>13</number>
+               <number>-1</number>
               </property>
               <item>
                <widget class="QPushButton" name="selectAllButton">
+                <property name="sizePolicy">
+                 <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+                  <horstretch>0</horstretch>
+                  <verstretch>0</verstretch>
+                 </sizepolicy>
+                </property>
                 <property name="minimumSize">
                  <size>
                   <width>50</width>
@@ -186,6 +229,12 @@
                   <height>30</height>
                  </size>
                 </property>
+                <property name="baseSize">
+                 <size>
+                  <width>0</width>
+                  <height>0</height>
+                 </size>
+                </property>
                 <property name="text">
                  <string>Select All</string>
                 </property>
@@ -194,7 +243,7 @@
               <item>
                <widget class="QPushButton" name="removeSelectedButton">
                 <property name="sizePolicy">
-                 <sizepolicy hsizetype="MinimumExpanding" vsizetype="Fixed">
+                 <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                   <horstretch>0</horstretch>
                   <verstretch>0</verstretch>
                  </sizepolicy>
@@ -213,14 +262,14 @@
                 </property>
                 <property name="sizeIncrement">
                  <size>
-                  <width>1</width>
-                  <height>1</height>
+                  <width>0</width>
+                  <height>0</height>
                  </size>
                 </property>
                 <property name="baseSize">
                  <size>
-                  <width>60</width>
-                  <height>30</height>
+                  <width>0</width>
+                  <height>0</height>
                  </size>
                 </property>
                 <property name="text">
@@ -230,6 +279,12 @@
               </item>
               <item>
                <widget class="QPushButton" name="deleteButton">
+                <property name="sizePolicy">
+                 <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+                  <horstretch>0</horstretch>
+                  <verstretch>0</verstretch>
+                 </sizepolicy>
+                </property>
                 <property name="minimumSize">
                  <size>
                   <width>70</width>
@@ -244,8 +299,8 @@
                 </property>
                 <property name="baseSize">
                  <size>
-                  <width>60</width>
-                  <height>30</height>
+                  <width>0</width>
+                  <height>0</height>
                  </size>
                 </property>
                 <property name="text">
@@ -263,28 +318,161 @@
       </widget>
       <widget class="QWidget" name="tab_4">
        <attribute name="title">
-        <string>Tab 2</string>
+        <string>Configuration</string>
        </attribute>
+       <layout class="QHBoxLayout" name="horizontalLayout_8">
+        <item>
+         <layout class="QHBoxLayout" name="horizontalLayout_7">
+          <item>
+           <layout class="QVBoxLayout" name="verticalLayout_7">
+            <item>
+             <widget class="QLabel" name="label_3">
+              <property name="text">
+               <string>Filter files to scan by date range</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <layout class="QVBoxLayout" name="verticalLayout_6">
+              <item>
+               <layout class="QHBoxLayout" name="horizontalLayout_5">
+                <item>
+                 <widget class="QLabel" name="label">
+                  <property name="text">
+                   <string>From:</string>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QDateEdit" name="dateEdit"/>
+                </item>
+                <item>
+                 <widget class="QLabel" name="label_2">
+                  <property name="text">
+                   <string>To:</string>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QDateEdit" name="dateEdit_2"/>
+                </item>
+                <item>
+                 <spacer name="horizontalSpacer">
+                  <property name="orientation">
+                   <enum>Qt::Horizontal</enum>
+                  </property>
+                  <property name="sizeHint" stdset="0">
+                   <size>
+                    <width>25</width>
+                    <height>12</height>
+                   </size>
+                  </property>
+                 </spacer>
+                </item>
+               </layout>
+              </item>
+              <item>
+               <layout class="QVBoxLayout" name="verticalLayout_2">
+                <item>
+                 <widget class="QTableWidget" name="fileTypesTableWidget">
+                  <column>
+                   <property name="text">
+                    <string/>
+                   </property>
+                  </column>
+                  <column>
+                   <property name="text">
+                    <string>File type</string>
+                   </property>
+                  </column>
+                  <column>
+                   <property name="text">
+                    <string>Description</string>
+                   </property>
+                  </column>
+                 </widget>
+                </item>
+                <item>
+                 <layout class="QHBoxLayout" name="horizontalLayout"/>
+                </item>
+               </layout>
+              </item>
+             </layout>
+            </item>
+           </layout>
+          </item>
+          <item>
+           <layout class="QVBoxLayout" name="verticalLayout_8">
+            <item>
+             <layout class="QHBoxLayout" name="horizontalLayout_6">
+              <item>
+               <widget class="QPushButton" name="pushButton">
+                <property name="text">
+                 <string>New Config</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QPushButton" name="pushButton_2">
+                <property name="text">
+                 <string>Load Config</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <spacer name="horizontalSpacer_2">
+                <property name="orientation">
+                 <enum>Qt::Horizontal</enum>
+                </property>
+                <property name="sizeHint" stdset="0">
+                 <size>
+                  <width>40</width>
+                  <height>20</height>
+                 </size>
+                </property>
+               </spacer>
+              </item>
+             </layout>
+            </item>
+            <item>
+             <spacer name="verticalSpacer">
+              <property name="orientation">
+               <enum>Qt::Vertical</enum>
+              </property>
+              <property name="sizeType">
+               <enum>QSizePolicy::Fixed</enum>
+              </property>
+              <property name="sizeHint" stdset="0">
+               <size>
+                <width>20</width>
+                <height>8</height>
+               </size>
+              </property>
+             </spacer>
+            </item>
+            <item>
+             <widget class="QTableWidget" name="scanPatternsTableWidget">
+              <column>
+               <property name="text">
+                <string>Pattern</string>
+               </property>
+              </column>
+              <column>
+               <property name="text">
+                <string>Description</string>
+               </property>
+              </column>
+             </widget>
+            </item>
+           </layout>
+          </item>
+         </layout>
+        </item>
+       </layout>
       </widget>
      </widget>
     </item>
    </layout>
-  </widget>
-  <widget class="QMenuBar" name="menubar">
-   <property name="geometry">
-    <rect>
-     <x>0</x>
-     <y>0</y>
-     <width>1202</width>
-     <height>24</height>
-    </rect>
-   </property>
-   <widget class="QMenu" name="menuScan_and_Delete">
-    <property name="title">
-     <string>Scan and Delete</string>
-    </property>
-   </widget>
-   <addaction name="menuScan_and_Delete"/>
   </widget>
  </widget>
  <resources/>

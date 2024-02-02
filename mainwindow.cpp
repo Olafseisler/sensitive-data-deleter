@@ -11,16 +11,24 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
 
 void MainWindow::setupTreeWidget() {
     fileTreeWidget = ui->fileTreeWidget;
-    flaggedFilesTableView = ui->flaggedFilesTableView;
-    flaggedFilesTableView->setHorizontalHeader(new QHeaderView(Qt::Horizontal, this));
+    flaggedFilesTreeWidget = ui->flaggedFilesTreeWidget;
+    fileTypesTableWidget = ui->fileTypesTableWidget;
+    scanPatternsTableWidget = ui->scanPatternsTableWidget;
+    flaggedFilesTreeWidget->setHeaderLabel("Flagged Files");
     fileTreeWidget->setColumnCount(1);
     fileTreeWidget->setHeaderLabel("Files and Folders");
 
-    // Create a filesystemmodel and list the current directory in the table view
-    auto *model = new QFileSystemModel(this);
-    model->setRootPath(QDir::currentPath());
-    flaggedFilesTableView->setModel(model);
-    flaggedFilesTableView->setRootIndex(model->index(QDir::currentPath()));
+    // Add some example items to the file types table
+    fileTypesTableWidget->insertRow(0);
+    fileTypesTableWidget->setItem(0, 0, new QTableWidgetItem("*.txt"));
+    fileTypesTableWidget->setItem(0, 1, new QTableWidgetItem("Text file"));
+
+    fileTypesTableWidget->insertRow(1);
+    fileTypesTableWidget->setItem(1, 0, new QTableWidgetItem("*.docx"));
+    fileTypesTableWidget->setItem(1, 1, new QTableWidgetItem("Word document"));
+
+    // Set the table to not be editable
+    fileTypesTableWidget->setEditTriggers(QAbstractItemView::NoEditTriggers);
 
 }
 
