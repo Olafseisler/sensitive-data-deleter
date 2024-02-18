@@ -28,6 +28,7 @@ public:
 private slots:
     void onDirectoryChanged(const QString &path);
     void on_addFolderButton_clicked();
+    void on_addFileButton_clicked();
 
 private:
     QTreeWidget *fileTreeWidget;
@@ -42,6 +43,8 @@ private:
     void setupFileSystemWatcher();
     void constructScanTreeViewRecursively(QTreeWidgetItem *parentItem, QString &path, int depth = 0);
     void updateTreeItem(QTreeWidgetItem *item, const QString &path);
+    void createTreeItem(QTreeWidgetItem *parentItem, const QString &path);
+    QString getParentPath(const QString &dirPath);
     QTreeWidgetItem* findItemForPath(QTreeWidget* treeWidget, const QString& path);
     QTreeWidgetItem* findItemForPath(QTreeWidgetItem* parentItem, const QString& path);
     Ui::MainWindow *ui;
