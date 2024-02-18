@@ -9,6 +9,8 @@
 #include <QTreeWidget>
 #include <QTableWidget>
 #include <QFileSystemWatcher>
+#include <QMap>
+#include <QDebug>
 
 #include "ui_mainwindow.h"
 
@@ -25,17 +27,20 @@ public:
 
 private slots:
     void onDirectoryChanged(const QString &path);
+    void on_addFolderButton_clicked();
 
 private:
     QTreeWidget *fileTreeWidget;
     QTreeWidget *flaggedFilesTreeWidget;
     QTableWidget *fileTypesTableWidget;
     QTableWidget *scanPatternsTableWidget;
+    QMap<QString, QTreeWidgetItem *> pathsToScan;
 
     QFileSystemWatcher *watcher;
 
     void setupTreeWidget();
     void setupFileSystemWatcher();
+    void constructScanTreeViewRecursively(QTreeWidgetItem *parentItem, QString &path, int depth = 0);
     void updateTreeItem(QTreeWidgetItem *item, const QString &path);
     QTreeWidgetItem* findItemForPath(QTreeWidget* treeWidget, const QString& path);
     QTreeWidgetItem* findItemForPath(QTreeWidgetItem* parentItem, const QString& path);
