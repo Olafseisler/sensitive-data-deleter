@@ -40,10 +40,7 @@
         <item>
          <layout class="QHBoxLayout" name="horizontalLayout_4">
           <item>
-           <layout class="QVBoxLayout" name="verticalLayout_3" stretch="1,0">
-            <property name="spacing">
-             <number>1</number>
-            </property>
+           <layout class="QVBoxLayout" name="verticalLayout_3">
             <item>
              <widget class="QTreeWidget" name="fileTreeWidget">
               <property name="sizePolicy">
@@ -63,6 +60,9 @@
                 <width>60</width>
                 <height>30</height>
                </size>
+              </property>
+              <property name="autoScrollMargin">
+               <number>16</number>
               </property>
               <column>
                <property name="text">
@@ -108,6 +108,12 @@
                   <height>30</height>
                  </size>
                 </property>
+                <property name="baseSize">
+                 <size>
+                  <width>0</width>
+                  <height>30</height>
+                 </size>
+                </property>
                 <property name="text">
                  <string>Add File</string>
                 </property>
@@ -145,6 +151,31 @@
                </widget>
               </item>
               <item>
+               <widget class="QPushButton" name="deleteSelectedButton">
+                <property name="sizePolicy">
+                 <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+                  <horstretch>0</horstretch>
+                  <verstretch>0</verstretch>
+                 </sizepolicy>
+                </property>
+                <property name="minimumSize">
+                 <size>
+                  <width>40</width>
+                  <height>30</height>
+                 </size>
+                </property>
+                <property name="maximumSize">
+                 <size>
+                  <width>150</width>
+                  <height>30</height>
+                 </size>
+                </property>
+                <property name="text">
+                 <string>Remove Selected</string>
+                </property>
+               </widget>
+              </item>
+              <item>
                <widget class="QPushButton" name="scanButton">
                 <property name="sizePolicy">
                  <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
@@ -174,7 +205,7 @@
            </layout>
           </item>
           <item>
-           <layout class="QVBoxLayout" name="verticalLayout_4" stretch="1,0">
+           <layout class="QVBoxLayout" name="verticalLayout_4" stretch="1,0,0">
             <property name="spacing">
              <number>1</number>
             </property>
@@ -209,6 +240,19 @@
                </property>
               </column>
              </widget>
+            </item>
+            <item>
+             <spacer name="verticalSpacer_2">
+              <property name="orientation">
+               <enum>Qt::Vertical</enum>
+              </property>
+              <property name="sizeHint" stdset="0">
+               <size>
+                <width>20</width>
+                <height>8</height>
+               </size>
+              </property>
+             </spacer>
             </item>
             <item>
              <layout class="QHBoxLayout" name="horizontalLayout_3">
@@ -279,7 +323,7 @@
                  </size>
                 </property>
                 <property name="text">
-                 <string>Remove Selected</string>
+                 <string>Unflag Selected</string>
                 </property>
                </widget>
               </item>
