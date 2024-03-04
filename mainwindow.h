@@ -13,6 +13,7 @@
 #include <QDebug>
 
 #include "ui_mainwindow.h"
+#include "configmanager.h"
 
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
@@ -37,11 +38,11 @@ private:
     QTableWidget *fileTypesTableWidget;
     QTableWidget *scanPatternsTableWidget;
     QMap<QString, QTreeWidgetItem *> pathsToScan;
+    ConfigManager *configManager;
 
     QFileSystemWatcher *watcher;
 
-    void setupTreeWidget();
-    void setupFileSystemWatcher();
+    void setupUI();
     void constructScanTreeViewRecursively(QTreeWidgetItem *parentItem, QString &path, int depth = 0, bool useShortName = false);
     void updateTreeItem(QTreeWidgetItem *item, const QString &path);
     void createTreeItem(QTreeWidgetItem *parentItem, const QString &path, bool useShortName);

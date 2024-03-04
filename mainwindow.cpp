@@ -8,12 +8,12 @@
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
     ui = new Ui::MainWindow;
     ui->setupUi(this);
-    setupTreeWidget();
+    configManager = new ConfigManager();
+    setupUI();
     watcher = new QFileSystemWatcher(this);
-
 }
 
-void MainWindow::setupTreeWidget() {
+void MainWindow::setupUI() {
     fileTreeWidget = ui->fileTreeWidget;
     flaggedFilesTreeWidget = ui->flaggedFilesTreeWidget;
     fileTypesTableWidget = ui->fileTypesTableWidget;
@@ -23,33 +23,39 @@ void MainWindow::setupTreeWidget() {
     flaggedFilesTreeWidget->setHeaderLabel("Flagged Files");
     fileTreeWidget->setHeaderLabel("Files and Folders");
 
-    // Add some example items to the file types table
-    fileTypesTableWidget->insertRow(0);
-    fileTypesTableWidget->setItem(0, 0, new QTableWidgetItem("*.txt"));
-    fileTypesTableWidget->setItem(0, 1, new QTableWidgetItem("Text file"));
+    // Load the config
+    QMap<QString, QString> fileTypes = configManager->getFileTypes();
+    foreach (const auto &fileType, fileTypes.keys()) {
+        fileTypesTableWidget->insertRow(fileTypesTableWidget->rowCount());
+        auto *checkBox = new QTableWidgetItem();
+        checkBox->setCheckState(Qt::Checked);
+        fileTypesTableWidget->setItem(fileTypesTableWidget->rowCount() - 1, 0, checkBox);
+        fileTypesTableWidget->setItem(fileTypesTableWidget->rowCount() - 1, 1, new QTableWidgetItem(fileType));
+        fileTypesTableWidget->setItem(fileTypesTableWidget->rowCount() - 1, 2, new QTableWidgetItem(fileTypes[fileType]));
+    }
 
-    fileTypesTableWidget->insertRow(1);
-    fileTypesTableWidget->setItem(1, 0, new QTableWidgetItem("*.docx"));
-    fileTypesTableWidget->setItem(1, 1, new QTableWidgetItem("Word document"));
+    // Set column widths. The first column should be as small as possible, the second column should be 30% of the table width
+    fileTypesTableWidget->horizontalHeader()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
+    fileTypesTableWidget->setColumnWidth(2, fileTypesTableWidget->width() * 0.3);
+    fileTypesTableWidget->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Stretch);
 
-    // Set the table to not be editable
+    QMap<QString, QString> scanPatterns = configManager->getScanPatterns();
+    foreach (const auto &scanPattern, scanPatterns.keys()) {
+        scanPatternsTableWidget->insertRow(scanPatternsTableWidget->rowCount());
+        auto *checkBox = new QTableWidgetItem();
+        checkBox->setCheckState(Qt::Checked);
+        scanPatternsTableWidget->setItem(scanPatternsTableWidget->rowCount() - 1, 0, checkBox);
+        scanPatternsTableWidget->setItem(scanPatternsTableWidget->rowCount() - 1, 1, new QTableWidgetItem(scanPattern));
+        scanPatternsTableWidget->setItem(scanPatternsTableWidget->rowCount() - 1, 2, new QTableWidgetItem(scanPatterns[scanPattern]));
+    }
+
+    scanPatternsTableWidget->horizontalHeader()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
+    scanPatternsTableWidget->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
+    scanPatternsTableWidget->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Stretch);
+
+    // Set the file types table to not be editable
     fileTypesTableWidget->setEditTriggers(QAbstractItemView::NoEditTriggers);
-
-}
-
-void MainWindow::setupFileSystemWatcher() {
-    // Go one directory up from currentPath and add TestFolder1 to the list of directories to watch
-    QStringList directoriesToWatch = {"/Users/olaf/Documents/Code/sensitive-data-deleter/TestFolder1"};
-
-            foreach (const QString &dirPath, directoriesToWatch) {
-            auto *rootItem = new QTreeWidgetItem(fileTreeWidget, QStringList(dirPath));
-            rootItem->setData(0, Qt::UserRole, dirPath);
-            pathsToScan.insert(dirPath, rootItem);
-            updateTreeItem(rootItem, dirPath);
-            watcher->addPath(dirPath);
-        }
-
-    connect(watcher, &QFileSystemWatcher::directoryChanged, this, &MainWindow::onDirectoryChanged);
+    connect(fileTreeWidget, &QTreeWidget::itemChanged, this, &MainWindow::onItemChanged);
 }
 
 void MainWindow::onDirectoryChanged(const QString &path) {
@@ -63,17 +69,16 @@ void MainWindow::updateTreeItem(QTreeWidgetItem *item, const QString &path) {
     QDir dir(path);
     item->takeChildren(); // Clear existing children
 
-            foreach (const QString &entry,
-                     dir.entryList(QDir::NoDotAndDotDot | QDir::Files | QDir::Dirs, QDir::DirsFirst)) {
-            QString childPath = path + QDir::separator() + entry;
-            auto *childItem = new QTreeWidgetItem(item, QStringList(entry));
-            childItem->setData(0, Qt::UserRole, childPath);
-            if (QFileInfo(childPath).isDir()) {
-                updateTreeItem(childItem, childPath); // Recursive call for subdirectories
-                watcher->addPath(childPath); // Add subdirectories to the watcher
-                pathsToScan.insert(childPath, childItem);
-            }
+    foreach (const QString &entry, dir.entryList(QDir::NoDotAndDotDot | QDir::Files | QDir::Dirs, QDir::DirsFirst)) {
+        QString childPath = path + QDir::separator() + entry;
+        auto *childItem = new QTreeWidgetItem(item, QStringList(entry));
+        childItem->setData(0, Qt::UserRole, childPath);
+        if (QFileInfo(childPath).isDir()) {
+            updateTreeItem(childItem, childPath); // Recursive call for subdirectories
+            watcher->addPath(childPath); // Add subdirectories to the watcher
+            pathsToScan.insert(childPath, childItem);
         }
+    }
 }
 
 QTreeWidgetItem *MainWindow::findItemForPath(QTreeWidgetItem *parentItem, const QString &path) {
@@ -157,7 +162,7 @@ QString MainWindow::getParentPath(const QString &dirPath) {
         parentPath = parentPath.left(parentPath.lastIndexOf(QDir::separator()));
     }
 
-    return nullptr;
+    return {};
 }
 
 void MainWindow::on_addFolderButton_clicked() {
@@ -176,12 +181,10 @@ void MainWindow::on_addFolderButton_clicked() {
     if (!parentPath.isEmpty()) {
         auto *parentItem = pathsToScan.value(parentPath);
         constructScanTreeViewRecursively(parentItem, dirPath);
-        connect(fileTreeWidget, &QTreeWidget::itemChanged, this, &MainWindow::onItemChanged);
         return;
     }
 
     constructScanTreeViewRecursively(fileTreeWidget->invisibleRootItem(), dirPath);
-    connect(fileTreeWidget, &QTreeWidget::itemChanged, this, &MainWindow::onItemChanged);
     // Uncheck all items in the tree
     for (const auto &item: pathsToScan) {
         item->setCheckState(0, Qt::Unchecked);
@@ -224,7 +227,7 @@ void MainWindow::onItemChanged(QTreeWidgetItem *item, int column) {
 
     qDebug() << pathsToScan;
 
-    QString path = item->data(0, Qt::UserRole).toString();
+//    QString path = item->data(0, Qt::UserRole).toString();
 //    if (item->checkState(0) == Qt::Checked) {
 //        qDebug() << "Item " << path << " checked";
 //        // If the item represents a directory, check all its children
@@ -275,7 +278,7 @@ void MainWindow::on_addFileButton_clicked() {
 
         createTreeItem(fileTreeWidget->invisibleRootItem(), itemPath, false);
     }
-    connect(fileTreeWidget, &QTreeWidget::itemChanged, this, &MainWindow::onItemChanged);
+
     // Uncheck all items in the tree
     for (const auto &item: pathsToScan) {
         item->setCheckState(0, Qt::Unchecked);
@@ -288,6 +291,7 @@ void MainWindow::removeItemFromTree(QTreeWidgetItem *item) {
     }
 
     QVariant itemData = item->data(0, Qt::UserRole);
+
     auto path = itemData.toString();
 
     // If it is a single file
