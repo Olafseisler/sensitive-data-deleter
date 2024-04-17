@@ -39,13 +39,13 @@ private:
     QTableWidget *scanPatternsTableWidget;
     QMap<QString, QTreeWidgetItem *> pathsToScan;
     ConfigManager *configManager;
-
+    QTreeWidgetItem *myRootItem;
     QFileSystemWatcher *watcher;
 
     void setupUI();
     void constructScanTreeViewRecursively(QTreeWidgetItem *parentItem, QString &path, int depth = 0, bool useShortName = false);
     void updateTreeItem(QTreeWidgetItem *item, const QString &path);
-    void createTreeItem(QTreeWidgetItem *parentItem, const QString &path, bool useShortName);
+    QTreeWidgetItem* createTreeItem(QTreeWidgetItem *parentItem, const QString &path, bool useShortName);
     void removeItemFromTree(QTreeWidgetItem *item);
     void onItemChanged(QTreeWidgetItem *item, int column);
     QString getParentPath(const QString &dirPath);

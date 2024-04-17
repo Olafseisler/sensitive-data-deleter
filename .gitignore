@@ -51,3 +51,6 @@ build/**/*
 lib/*
 bin/*
 test/test_runner
+/.idea/.gitignore
+/CMakeLists.txt.user
+/.idea/untitled.iml
