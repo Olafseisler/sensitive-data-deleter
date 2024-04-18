@@ -14,6 +14,7 @@
 
 #include "ui_mainwindow.h"
 #include "configmanager.h"
+#include "filescanner.h"
 
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
@@ -24,13 +25,15 @@ Q_OBJECT
 
 public:
     MainWindow(QWidget *parent = nullptr);
+    ~MainWindow();
     // ... other members and methods ...
 
 private slots:
     void onDirectoryChanged(const QString &path);
     void on_addFolderButton_clicked();
     void on_addFileButton_clicked();
-    void on_deleteSelectedButton_clicked();
+    void on_removeSelectedButton_2_clicked();
+    void on_scanButton_clicked();
 
 private:
     QTreeWidget *fileTreeWidget;
@@ -41,6 +44,7 @@ private:
     ConfigManager *configManager;
     QTreeWidgetItem *myRootItem;
     QFileSystemWatcher *watcher;
+    FileScanner *fileScanner;
 
     void setupUI();
     void constructScanTreeViewRecursively(QTreeWidgetItem *parentItem, QString &path, int depth = 0, bool useShortName = false);

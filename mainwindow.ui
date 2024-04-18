@@ -30,7 +30,7 @@
     <item>
      <widget class="QTabWidget" name="tabWidget">
       <property name="currentIndex">
-       <number>1</number>
+       <number>0</number>
       </property>
       <widget class="QWidget" name="tab_3">
        <attribute name="title">
@@ -151,7 +151,7 @@
                </widget>
               </item>
               <item>
-               <widget class="QPushButton" name="deleteSelectedButton">
+               <widget class="QPushButton" name="removeSelectedButton_2">
                 <property name="sizePolicy">
                  <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                   <horstretch>0</horstretch>
@@ -229,11 +229,6 @@
                 <height>30</height>
                </size>
               </property>
-              <column>
-               <property name="text">
-                <string>1</string>
-               </property>
-              </column>
               <column>
                <property name="text">
                 <string>Flagged Files</string>

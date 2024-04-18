@@ -11,6 +11,14 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
     configManager = new ConfigManager();
     setupUI();
     watcher = new QFileSystemWatcher(this);
+    fileScanner = new FileScanner();
+}
+
+MainWindow::~MainWindow() {
+    delete ui;
+    delete configManager;
+    delete watcher;
+    delete fileScanner;
 }
 
 void MainWindow::setupUI() {
@@ -27,14 +35,15 @@ void MainWindow::setupUI() {
 
     // Load the config
     QMap<QString, QString> fileTypes = configManager->getFileTypes();
-    foreach (const auto &fileType, fileTypes.keys()) {
-        fileTypesTableWidget->insertRow(fileTypesTableWidget->rowCount());
-        auto *checkBox = new QTableWidgetItem();
-        checkBox->setCheckState(Qt::Checked);
-        fileTypesTableWidget->setItem(fileTypesTableWidget->rowCount() - 1, 0, checkBox);
-        fileTypesTableWidget->setItem(fileTypesTableWidget->rowCount() - 1, 1, new QTableWidgetItem(fileType));
-        fileTypesTableWidget->setItem(fileTypesTableWidget->rowCount() - 1, 2, new QTableWidgetItem(fileTypes[fileType]));
-    }
+            foreach (const auto &fileType, fileTypes.keys()) {
+            fileTypesTableWidget->insertRow(fileTypesTableWidget->rowCount());
+            auto *checkBox = new QTableWidgetItem();
+            checkBox->setCheckState(Qt::Checked);
+            fileTypesTableWidget->setItem(fileTypesTableWidget->rowCount() - 1, 0, checkBox);
+            fileTypesTableWidget->setItem(fileTypesTableWidget->rowCount() - 1, 1, new QTableWidgetItem(fileType));
+            fileTypesTableWidget->setItem(fileTypesTableWidget->rowCount() - 1, 2,
+                                          new QTableWidgetItem(fileTypes[fileType]));
+        }
 
     // Set column widths. The first column should be as small as possible, the second column should be 30% of the table width
     fileTypesTableWidget->horizontalHeader()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
@@ -42,14 +51,16 @@ void MainWindow::setupUI() {
     fileTypesTableWidget->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Stretch);
 
     QMap<QString, QString> scanPatterns = configManager->getScanPatterns();
-    foreach (const auto &scanPattern, scanPatterns.keys()) {
-        scanPatternsTableWidget->insertRow(scanPatternsTableWidget->rowCount());
-        auto *checkBox = new QTableWidgetItem();
-        checkBox->setCheckState(Qt::Checked);
-        scanPatternsTableWidget->setItem(scanPatternsTableWidget->rowCount() - 1, 0, checkBox);
-        scanPatternsTableWidget->setItem(scanPatternsTableWidget->rowCount() - 1, 1, new QTableWidgetItem(scanPattern));
-        scanPatternsTableWidget->setItem(scanPatternsTableWidget->rowCount() - 1, 2, new QTableWidgetItem(scanPatterns[scanPattern]));
-    }
+            foreach (const auto &scanPattern, scanPatterns.keys()) {
+            scanPatternsTableWidget->insertRow(scanPatternsTableWidget->rowCount());
+            auto *checkBox = new QTableWidgetItem();
+            checkBox->setCheckState(Qt::Checked);
+            scanPatternsTableWidget->setItem(scanPatternsTableWidget->rowCount() - 1, 0, checkBox);
+            scanPatternsTableWidget->setItem(scanPatternsTableWidget->rowCount() - 1, 1,
+                                             new QTableWidgetItem(scanPattern));
+            scanPatternsTableWidget->setItem(scanPatternsTableWidget->rowCount() - 1, 2,
+                                             new QTableWidgetItem(scanPatterns[scanPattern]));
+        }
 
     scanPatternsTableWidget->horizontalHeader()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
     scanPatternsTableWidget->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
@@ -71,16 +82,17 @@ void MainWindow::updateTreeItem(QTreeWidgetItem *item, const QString &path) {
     QDir dir(path);
     item->takeChildren(); // Clear existing children
 
-    foreach (const QString &entry, dir.entryList(QDir::NoDotAndDotDot | QDir::Files | QDir::Dirs, QDir::DirsFirst)) {
-        QString childPath = path + QDir::separator() + entry;
-        auto *childItem = new QTreeWidgetItem(item, QStringList(entry));
-        childItem->setData(0, Qt::UserRole, childPath);
-        if (QFileInfo(childPath).isDir()) {
-            updateTreeItem(childItem, childPath); // Recursive call for subdirectories
-            watcher->addPath(childPath); // Add subdirectories to the watcher
-            pathsToScan.insert(childPath, childItem);
+            foreach (const QString &entry,
+                     dir.entryList(QDir::NoDotAndDotDot | QDir::Files | QDir::Dirs, QDir::DirsFirst)) {
+            QString childPath = path + QDir::separator() + entry;
+            auto *childItem = new QTreeWidgetItem(item, QStringList(entry));
+            childItem->setData(0, Qt::UserRole, childPath);
+            if (QFileInfo(childPath).isDir()) {
+                updateTreeItem(childItem, childPath); // Recursive call for subdirectories
+                watcher->addPath(childPath); // Add subdirectories to the watcher
+                pathsToScan.insert(childPath, childItem);
+            }
         }
-    }
 }
 
 QTreeWidgetItem *MainWindow::findItemForPath(QTreeWidgetItem *parentItem, const QString &path) {
@@ -142,10 +154,11 @@ void MainWindow::constructScanTreeViewRecursively(QTreeWidgetItem *parentItem, Q
     }
 
     QDir dir(currentPath);
-    foreach (const QString &entry, dir.entryList(QDir::NoDotAndDotDot | QDir::Files | QDir::Dirs, QDir::DirsFirst)) {
-        QString childPath = currentPath + QDir::separator() + entry;
-        constructScanTreeViewRecursively(directoryItem, childPath, depth + 1, true);
-    }
+            foreach (const QString &entry,
+                     dir.entryList(QDir::NoDotAndDotDot | QDir::Files | QDir::Dirs, QDir::DirsFirst)) {
+            QString childPath = currentPath + QDir::separator() + entry;
+            constructScanTreeViewRecursively(directoryItem, childPath, depth + 1, true);
+        }
 }
 
 QString MainWindow::getParentPath(const QString &dirPath) {
@@ -205,7 +218,7 @@ QString formatFileSize(qint64 size) {
     }
 }
 
-QTreeWidgetItem* MainWindow::createTreeItem(QTreeWidgetItem *parentItem, const QString &path, bool useShortName) {
+QTreeWidgetItem *MainWindow::createTreeItem(QTreeWidgetItem *parentItem, const QString &path, bool useShortName) {
     QString shortName = useShortName ? path.split(QDir::separator()).last() : path;
     auto *item = new QTreeWidgetItem(parentItem, QStringList(shortName));
     // Set the parent
@@ -290,8 +303,51 @@ void MainWindow::removeItemFromTree(QTreeWidgetItem *item) {
     watcher->removePath(path);
 }
 
-void MainWindow::on_deleteSelectedButton_clicked()
-{
+void MainWindow::on_scanButton_clicked() {
+    // Get all checked file types and patterns and convert them to std strings
+    std::map<std::string, std::string> checkedFileTypes;
+    for (int i = 0; i < fileTypesTableWidget->rowCount(); ++i) {
+        if (fileTypesTableWidget->item(i, 0)->checkState() == Qt::Checked) {
+            checkedFileTypes[fileTypesTableWidget->item(i, 1)->text().toStdString()] =
+                    fileTypesTableWidget->item(i, 2)->text().toStdString();
+        }
+    }
+    std::map<std::string, std::string> checkedScanPatterns;
+    for (int i = 0; i < scanPatternsTableWidget->rowCount(); ++i) {
+        if (scanPatternsTableWidget->item(i, 0)->checkState() == Qt::Checked) {
+            checkedScanPatterns[scanPatternsTableWidget->item(i, 1)->text().toStdString()] =
+                    scanPatternsTableWidget->item(i, 2)->text().toStdString();
+        }
+    }
+
+    // Get all files in pathsToScan
+    std::vector<std::string> filePaths;
+    for (const auto &item: pathsToScan) {
+        //If it is a file, add it to the list of files to scan
+        if (!QFileInfo(item->data(0, Qt::UserRole).toString()).isDir()) {
+            filePaths.push_back(item->data(0, Qt::UserRole).toString().toStdString());
+        }
+    }
+
+    // Scan the files
+    auto matches = fileScanner->scanFiles(filePaths, checkedScanPatterns, checkedFileTypes);
+    // Delete all existing items in the flagged files tree widget then show new ones
+    flaggedFilesTreeWidget->clear();
+    for (const auto &match: matches) {
+        auto *item = new QTreeWidgetItem(flaggedFilesTreeWidget, QStringList(QString::fromStdString(match.first)));
+        for (const auto &matchInfo: match.second) {
+            auto *childItem = new QTreeWidgetItem(item, QStringList(
+                    QString::fromStdString(matchInfo.patternUsed.second) + ": found " +
+                    QString::fromStdString(matchInfo.match) +
+                    " from index " + QString::number(matchInfo.startIndex) + " to " +
+                    QString::number(matchInfo.endIndex)));
+
+
+        }
+    }
+}
+
+void MainWindow::on_removeSelectedButton_2_clicked() {
     // Get all checked items
     QList<QTreeWidgetItem *> checkedItems;
     for (const auto &item: pathsToScan) {
@@ -314,6 +370,5 @@ void MainWindow::on_deleteSelectedButton_clicked()
             }
         }
     }
-
 }
 

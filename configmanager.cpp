@@ -117,13 +117,19 @@ void ConfigManager::updateConfigFile() {
     QJsonArray fileTypesArray;
     QJsonArray scanPatternsArray;
 
-    for (const auto & fileType : fileTypes) {
-        fileTypesArray.append(fileType);
+    for (const auto & fileType : fileTypes.keys()) {
+        QJsonObject fileTypeObj;
+        fileTypeObj["fileType"] = fileType;
+        fileTypeObj["description"] = fileTypes[fileType];
+        fileTypesArray.append(fileTypeObj);
+    }
+    for (const auto & scanPattern : scanPatterns.keys()) {
+        QJsonObject scanPatternObj;
+        scanPatternObj["pattern"] = scanPattern;
+        scanPatternObj["description"] = scanPatterns[scanPattern];
+        scanPatternsArray.append(scanPatternObj);
     }
 
-    for (const auto & scanPattern : scanPatterns) {
-        scanPatternsArray.append(scanPattern);
-    }
 
     obj["fileTypes"] = fileTypesArray;
     obj["scanPatterns"] = scanPatternsArray;

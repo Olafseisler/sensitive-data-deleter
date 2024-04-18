@@ -24,7 +24,9 @@ find_package(Qt6 COMPONENTS
         REQUIRED)
 
 
-add_executable(${PROJECT} main.cpp ${QT_RESOURCES} mainwindow.cpp mainwindow.h mainwindow.ui configmanager.cpp configmanager.h)
+add_executable(${PROJECT} main.cpp ${QT_RESOURCES} mainwindow.cpp mainwindow.h mainwindow.ui configmanager.cpp configmanager.h
+        filescanner.cpp
+        filescanner.h)
 target_link_libraries(${PROJECT}
         Qt::Core
         Qt::Gui
