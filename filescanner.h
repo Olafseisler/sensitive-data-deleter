@@ -27,6 +27,7 @@ public:
                                                                 std::map<std::string, std::string> &fileTypes);
     std::vector<MatchInfo> scanFileForSensitiveData(const std::string &filePath, std::map<std::string, std::string> &patterns);
     void deleteFiles(std::vector<std::string> &filePaths);
+    void scrambleFile(const std::string &filePath);
 
 };
 

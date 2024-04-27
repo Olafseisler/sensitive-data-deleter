@@ -5,6 +5,11 @@
 #include <fstream>
 #include <algorithm>
 #include <filesystem>
+#include <QMimeType>
+#include <QMimeDatabase>
+#include <filesystem>
+#include <random>
+#include <iostream>
 
 #include "filescanner.h"
 
@@ -31,6 +36,12 @@ std::map<std::string, std::vector<MatchInfo>> FileScanner::scanFiles(const std::
             if (filePath.find(item.first) != std::string::npos) {
                 break;
             }
+        }
+
+        // If the file is not a text file based on MIME type, skip the file
+        QString mimeType = QMimeDatabase().mimeTypeForFile(QString::fromStdString(filePath)).name();
+        if (!mimeType.contains("text")) {
+            continue;
         }
 
         std::vector<MatchInfo> fileMatches = scanFileForSensitiveData(filePath, patterns);
@@ -81,7 +92,57 @@ FileScanner::scanFileForSensitiveData(const std::string &filePath, std::map<std:
     return matches;
 }
 
-void FileScanner::deleteFiles(std::vector<std::string> &filePaths) {
-    // TODO: Fuzz the file content before deletion
+/**
+ * Write the file full of random data
+ * Pad to the nearest 4KB block size
+ * @param filePath The path to the file to scramble
+ */
+void FileScanner::scrambleFile(const std::string &filePath) {
+    std::ofstream file(filePath, std::ios::binary);
+    // Handle file write error
+    if (!file.is_open()) {
+        throw std::runtime_error("Could not open file for scrambling.");
+    }
 
+    // Get the file size
+    size_t fileSize = std::filesystem::file_size(filePath);
+    // Calculate the number of blocks
+    size_t numBlocks = fileSize / CHUNK_SIZE;
+    // Calculate the number of bytes to pad
+    long numBytesToPad = CHUNK_SIZE - (fileSize % CHUNK_SIZE);
+
+    // Initialize random generator
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_real_distribution<int8_t> dis(0, 255);
+
+
+    for (int i = 0; i < numBlocks; i++) {
+        int8_t buffer[CHUNK_SIZE];
+        for (signed char & j : buffer) {
+            j = dis(gen);
+        }
+        file.write((char *) buffer, CHUNK_SIZE);
+    }
+
+    // Pad the file with random data
+    int8_t buffer[numBytesToPad];
+    for (signed char & j : buffer) {
+        j = dis(gen);
+    }
+    file.write((char *) buffer, numBytesToPad);
+
+    file.close();
+}
+
+void FileScanner::deleteFiles(std::vector<std::string> &filePaths) {
+    std::vector<std::string*> filePaths2;
+    for (const auto &filePath: filePaths) {
+        try {
+            scrambleFile(filePath);
+            std::filesystem::remove(filePath);
+        } catch (std::exception &e) {
+            std::cerr << "Failed to scramble file: " << e.what() << std::endl;
+        }
+    }
 }

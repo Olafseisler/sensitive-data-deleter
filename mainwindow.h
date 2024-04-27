@@ -34,6 +34,9 @@ private slots:
     void on_addFileButton_clicked();
     void on_removeSelectedButton_2_clicked();
     void on_scanButton_clicked();
+    void on_selectAllFlaggedButton_clicked();
+    void on_unflagSelectedButton_clicked();
+    void on_deleteButton_clicked();
 
 private:
     QTreeWidget *fileTreeWidget;
@@ -45,6 +48,9 @@ private:
     QTreeWidgetItem *myRootItem;
     QFileSystemWatcher *watcher;
     FileScanner *fileScanner;
+    bool allFlaggedSelected = false;
+    QMap<std::string, QTreeWidgetItem *> flaggedItems;
+    Ui::MainWindow *ui;
 
     void setupUI();
     void constructScanTreeViewRecursively(QTreeWidgetItem *parentItem, QString &path, int depth = 0, bool useShortName = false);
@@ -55,7 +61,7 @@ private:
     QString getParentPath(const QString &dirPath);
     QTreeWidgetItem* findItemForPath(QTreeWidget* treeWidget, const QString& path);
     QTreeWidgetItem* findItemForPath(QTreeWidgetItem* parentItem, const QString& path);
-    Ui::MainWindow *ui;
+    QDialog* createConfirmationDialog(const QString &title, const QString &labelText, const QString &buttonText);
 };
 
 

@@ -2,6 +2,7 @@
 #include <QDir>
 #include <QFileSystemModel>
 #include <QFileDialog>
+#include <QCheckBox>
 
 #define MAX_DEPTH 10
 
@@ -29,6 +30,11 @@ void MainWindow::setupUI() {
     fileTypesTableWidget = ui->fileTypesTableWidget;
     scanPatternsTableWidget = ui->scanPatternsTableWidget;
     fileTreeWidget->setSelectionBehavior(QAbstractItemView::SelectRows);
+
+    flaggedFilesTreeWidget->setColumnCount(1);
+    flaggedFilesTreeWidget->setSelectionBehavior(QAbstractItemView::SelectRows);
+    flaggedFilesTreeWidget->setSelectionMode(QAbstractItemView::MultiSelection);
+
 
     flaggedFilesTreeWidget->setHeaderLabel("Flagged Files");
     fileTreeWidget->setHeaderLabel("Files and Folders");
@@ -236,6 +242,7 @@ QTreeWidgetItem *MainWindow::createTreeItem(QTreeWidgetItem *parentItem, const Q
 }
 
 void MainWindow::onItemChanged(QTreeWidgetItem *item, int column) {
+    qDebug () << "Item changed: " << item->text(0) << " column: " << column;
     if (column != 0) {
         return;
     }
@@ -266,7 +273,7 @@ void MainWindow::on_addFileButton_clicked() {
         QString parentPath = getParentPath(itemPath);
         if (!parentPath.isEmpty()) {
             auto *parentItem = pathsToScan.value(parentPath);
-            auto treeItem = createTreeItem(parentItem, itemPath, true);
+            createTreeItem(parentItem, itemPath, true);
             continue;
         }
 
@@ -303,6 +310,25 @@ void MainWindow::removeItemFromTree(QTreeWidgetItem *item) {
     watcher->removePath(path);
 }
 
+QDialog *
+MainWindow::createConfirmationDialog(const QString &title, const QString &labelText, const QString &buttonText) {
+    auto *dialog = new QDialog(this);
+    dialog->setWindowTitle(title);
+    auto *layout = new QVBoxLayout();
+    dialog->setLayout(layout);
+    auto *label = new QLabel(labelText);
+    layout->addWidget(label);
+    auto *confirmButton = new QPushButton(buttonText);
+    layout->addWidget(confirmButton);
+    connect(confirmButton, &QPushButton::clicked, dialog, &QDialog::accept);
+    auto *cancelButton = new QPushButton("Cancel");
+    layout->addWidget(cancelButton);
+    connect(cancelButton, &QPushButton::clicked, dialog, &QDialog::reject);
+    dialog->exec();
+
+    return dialog;
+}
+
 void MainWindow::on_scanButton_clicked() {
     // Get all checked file types and patterns and convert them to std strings
     std::map<std::string, std::string> checkedFileTypes;
@@ -334,16 +360,59 @@ void MainWindow::on_scanButton_clicked() {
     // Delete all existing items in the flagged files tree widget then show new ones
     flaggedFilesTreeWidget->clear();
     for (const auto &match: matches) {
-        auto *item = new QTreeWidgetItem(flaggedFilesTreeWidget, QStringList(QString::fromStdString(match.first)));
+        // Create a QWidget with a QHBoxLayout, workaround for selectable text in QTreeWidget
+        auto *item = new QTreeWidgetItem(flaggedFilesTreeWidget);
+        auto *widget = new QWidget();
+        auto *layout = new QHBoxLayout();
+        layout->setContentsMargins(0, 0, 0, 0);
+        layout->setSpacing(20);
+        widget->setLayout(layout);
+        auto *checkBox = new QCheckBox();
+        auto qstringPath = QString::fromStdString(match.first);
+        auto shortName = qstringPath.split(QDir::separator()).last(); // Get the file name only
+        auto *label = new QLabel(shortName);
+        label->setTextInteractionFlags(Qt::TextSelectableByMouse);
+        QFont font = label->font();
+        font.setPointSize(10);
+        label->setFont(font);
+
+        layout->addWidget(checkBox);
+        layout->addWidget(label);
+        layout->addStretch(1);
+
+        flaggedFilesTreeWidget->setItemWidget(item, 0, widget);
+
+        // Add full path of file as a child item
+        auto *fullPathItem = new QTreeWidgetItem(item);
+        auto *fullPathLabel = new QLabel("Full path: " + qstringPath);
+        QFont fullPathFont = fullPathLabel->font();
+        fullPathFont.setPointSize(9);
+        fullPathLabel->setFont(fullPathFont);
+
+        fullPathLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
+        flaggedFilesTreeWidget->setItemWidget(fullPathItem, 0, fullPathLabel);
+        fullPathItem->setFlags(fullPathItem->flags() & ~Qt::ItemIsSelectable);
+
         for (const auto &matchInfo: match.second) {
-            auto *childItem = new QTreeWidgetItem(item, QStringList(
+            auto *childItem = new QTreeWidgetItem(item);
+            auto *childLabel = new QLabel(
                     QString::fromStdString(matchInfo.patternUsed.second) + ": found " +
                     QString::fromStdString(matchInfo.match) +
                     " from index " + QString::number(matchInfo.startIndex) + " to " +
-                    QString::number(matchInfo.endIndex)));
+                    QString::number(matchInfo.endIndex)
+            );
 
+            // Set child item to not be selectable
+            childItem->setFlags(childItem->flags() & ~Qt::ItemIsSelectable);
+            childLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
+            flaggedFilesTreeWidget->setItemWidget(childItem, 0, childLabel);
 
+            auto childFont = childLabel->font();
+            childFont.setPointSize(9);
+            childLabel->setFont(childFont);
         }
+
+        flaggedItems[match.first] = item;
     }
 }
 
@@ -370,5 +439,82 @@ void MainWindow::on_removeSelectedButton_2_clicked() {
             }
         }
     }
+}
+
+
+void MainWindow::on_selectAllFlaggedButton_clicked() {
+    for (int i = 0; i < flaggedFilesTreeWidget->topLevelItemCount(); ++i) {
+        // Get the checkbox from the layout on the top level item
+        auto *topLevelItem = flaggedFilesTreeWidget->topLevelItem(i);
+        auto *widget = flaggedFilesTreeWidget->itemWidget(topLevelItem, 0);
+        auto *layout = widget->layout();
+        auto *checkBox = qobject_cast<QCheckBox *>(layout->itemAt(0)->widget());
+        if (allFlaggedSelected) {
+            checkBox->setCheckState(Qt::Unchecked);
+        } else {
+            checkBox->setCheckState(Qt::Checked);
+        }
+    }
+
+    // Toggle the flag
+    allFlaggedSelected = !allFlaggedSelected;
+    ui->selectAllFlaggedButton->setText(allFlaggedSelected ? "Deselect All" : "Select All");
+}
+
+void MainWindow::on_unflagSelectedButton_clicked() {
+    // Get all checked items
+    QList<QTreeWidgetItem *> checkedItems;
+    for (int i = 0; i < flaggedFilesTreeWidget->topLevelItemCount(); ++i) {
+        auto *topLevelItem = flaggedFilesTreeWidget->topLevelItem(i);
+        auto *widget = flaggedFilesTreeWidget->itemWidget(topLevelItem, 0);
+        auto *layout = widget->layout();
+        auto *checkBox = qobject_cast<QCheckBox *>(layout->itemAt(0)->widget());
+
+        if (checkBox->checkState() == Qt::Checked) {
+            auto *childLabel = qobject_cast<QLabel *>(flaggedFilesTreeWidget->itemWidget(topLevelItem->child(0), 0));
+            auto itemToRemove = childLabel->text().split(":").last().trimmed().toStdString();
+
+            flaggedItems.remove(itemToRemove);
+            checkedItems.append(topLevelItem);
+        }
+    }
+
+    // Remove checked items from the tree
+    while (!checkedItems.isEmpty()) {
+        auto item = checkedItems.takeFirst();
+        removeItemFromTree(item);
+        delete item;
+    }
+}
+
+void MainWindow::on_deleteButton_clicked() {
+    if (flaggedItems.empty()) { return; }
+
+    // Show confirmation dialog
+    auto *dialog = createConfirmationDialog("Delete Files",
+                                            "This will permanently delete the all flagged files. Do wish to proceed?",
+                                            "Delete");
+
+    if (dialog->result() == QDialog::Rejected) {
+        return;
+    }
+
+    QList<std::string> flaggedItemsToRemove = flaggedItems.keys();
+    std::vector<std::string> flaggedItemsToRemoveVector(flaggedItemsToRemove.begin(), flaggedItemsToRemove.end());
+    fileScanner->deleteFiles(flaggedItemsToRemoveVector);
+
+    // Remove all flagged files
+    while (!flaggedItems.empty()) {
+        auto item = flaggedItems.begin();
+        removeItemFromTree(item.value());
+        if (item.value()) {
+            delete item.value();
+        }
+        flaggedItems.remove(item.key());
+    }
+
+    // Close the dialog
+    dialog->close();
+    delete dialog;
 }
 
