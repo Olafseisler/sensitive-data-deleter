@@ -49,6 +49,7 @@ private:
     QFileSystemWatcher *watcher;
     FileScanner *fileScanner;
     bool allFlaggedSelected = false;
+    QString lastUpdatedPath = "";
     QMap<std::string, QTreeWidgetItem *> flaggedItems;
     Ui::MainWindow *ui;
 

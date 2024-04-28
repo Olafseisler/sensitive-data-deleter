@@ -10,8 +10,8 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
     ui = new Ui::MainWindow;
     ui->setupUi(this);
     configManager = new ConfigManager();
-    setupUI();
     watcher = new QFileSystemWatcher(this);
+    setupUI();
     fileScanner = new FileScanner();
 }
 
@@ -74,31 +74,62 @@ void MainWindow::setupUI() {
 
     // Set the file types table to not be editable
     fileTypesTableWidget->setEditTriggers(QAbstractItemView::NoEditTriggers);
-    connect(fileTreeWidget, &QTreeWidget::itemChanged, this, &MainWindow::onItemChanged);
+//    connect(fileTreeWidget, &QTreeWidget::itemChanged, this, &MainWindow::onItemChanged);
+    connect(watcher, &QFileSystemWatcher::directoryChanged, this, &MainWindow::onDirectoryChanged);
 }
 
 void MainWindow::onDirectoryChanged(const QString &path) {
-    QTreeWidgetItem *item = pathsToScan.value(path);
-    if (item) {
-        updateTreeItem(item, path);
+    qDebug() << "Directory changed: " << path;
+
+    // Check if the changed item is a parent of any keys in flaggedItems.
+    for (const auto &flaggedItemPath: flaggedItems.keys()) {
+        if (flaggedItemPath.find(path.toStdString()) != std::string::npos) {
+            QFile flaggedItemDir(flaggedItemPath.c_str());
+            if (!flaggedItemDir.exists()) { // If the flagged item no longer exists, remove it from the tree
+                auto *flaggedItemToRemove = flaggedItems.value(flaggedItemPath);
+                removeItemFromTree(flaggedItemToRemove);
+                flaggedItems.remove(flaggedItemPath);
+                delete flaggedItemToRemove;
+            }
+        }
     }
+
+    QTreeWidgetItem *scanItem = pathsToScan.value(path);
+    if (scanItem) {
+        updateTreeItem(scanItem, path);
+        if (path == lastUpdatedPath) {
+            return; // Skip processing if this directory was just updated
+        }
+        lastUpdatedPath = path;
+    }
+
 }
 
 void MainWindow::updateTreeItem(QTreeWidgetItem *item, const QString &path) {
     QDir dir(path);
-    item->takeChildren(); // Clear existing children
 
-            foreach (const QString &entry,
-                     dir.entryList(QDir::NoDotAndDotDot | QDir::Files | QDir::Dirs, QDir::DirsFirst)) {
-            QString childPath = path + QDir::separator() + entry;
-            auto *childItem = new QTreeWidgetItem(item, QStringList(entry));
-            childItem->setData(0, Qt::UserRole, childPath);
-            if (QFileInfo(childPath).isDir()) {
-                updateTreeItem(childItem, childPath); // Recursive call for subdirectories
-                watcher->addPath(childPath); // Add subdirectories to the watcher
-                pathsToScan.insert(childPath, childItem);
-            }
+    if (!dir.exists()) {
+        // Remove the item from the tree if it no longer exists
+        removeItemFromTree(item);
+        delete item;
+        return;
+    }
+
+    foreach (const QString &entry,
+                 dir.entryList(QDir::NoDotAndDotDot | QDir::Files | QDir::Dirs, QDir::DirsFirst)) {
+
+        QString childPath = path + QDir::separator() + entry;
+        QTreeWidgetItem *childItem = pathsToScan.value(childPath);
+        if (!childItem) {
+            childItem = createTreeItem(item, childPath, true);
         }
+        if (QFileInfo(childPath).isDir()) {
+            updateTreeItem(childItem, childPath); // Recursive call for subdirectories
+//            watcher->addPath(childPath); // Add subdirectories to the watcher
+            pathsToScan.insert(childPath, childItem);
+        }
+    }
+    item->setCheckState(0, Qt::Unchecked);
 }
 
 QTreeWidgetItem *MainWindow::findItemForPath(QTreeWidgetItem *parentItem, const QString &path) {
@@ -201,8 +232,10 @@ void MainWindow::on_addFolderButton_clicked() {
         return;
     }
 
+    watcher->addPath(dirPath);
     // Create new tree item for the directory
     constructScanTreeViewRecursively(myRootItem, dirPath);
+
     // Uncheck all items in the tree
     for (const auto &item: pathsToScan) {
         item->setCheckState(0, Qt::Unchecked);
@@ -237,15 +270,13 @@ QTreeWidgetItem *MainWindow::createTreeItem(QTreeWidgetItem *parentItem, const Q
     }
     item->setCheckState(0, Qt::Unchecked);
     pathsToScan.insert(path, item);
-    watcher->addPath(path);
+//    watcher->addPath(path);
     return item;
 }
 
 void MainWindow::onItemChanged(QTreeWidgetItem *item, int column) {
-    qDebug () << "Item changed: " << item->text(0) << " column: " << column;
-    if (column != 0) {
-        return;
-    }
+    qDebug () << "Watcher dirs: " << watcher->directories();
+    qDebug() << "Watcher files: "  << watcher->files();
 }
 
 void MainWindow::on_addFileButton_clicked() {

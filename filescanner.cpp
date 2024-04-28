@@ -141,6 +141,7 @@ void FileScanner::deleteFiles(std::vector<std::string> &filePaths) {
         try {
             scrambleFile(filePath);
             std::filesystem::remove(filePath);
+
         } catch (std::exception &e) {
             std::cerr << "Failed to scramble file: " << e.what() << std::endl;
         }
