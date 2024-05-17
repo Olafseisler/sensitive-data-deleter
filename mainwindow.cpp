@@ -115,20 +115,20 @@ void MainWindow::updateTreeItem(QTreeWidgetItem *item, const QString &path) {
         return;
     }
 
-    foreach (const QString &entry,
-                 dir.entryList(QDir::NoDotAndDotDot | QDir::Files | QDir::Dirs, QDir::DirsFirst)) {
+            foreach (const QString &entry,
+                     dir.entryList(QDir::NoDotAndDotDot | QDir::Files | QDir::Dirs, QDir::DirsFirst)) {
 
-        QString childPath = path + QDir::separator() + entry;
-        QTreeWidgetItem *childItem = pathsToScan.value(childPath);
-        if (!childItem) {
-            childItem = createTreeItem(item, childPath, true);
-        }
-        if (QFileInfo(childPath).isDir()) {
-            updateTreeItem(childItem, childPath); // Recursive call for subdirectories
+            QString childPath = path + "/" + entry;
+            QTreeWidgetItem *childItem = pathsToScan.value(childPath);
+            if (!childItem) {
+                childItem = createTreeItem(item, childPath, true);
+            }
+            if (QFileInfo(childPath).isDir()) {
+                updateTreeItem(childItem, childPath); // Recursive call for subdirectories
 //            watcher->addPath(childPath); // Add subdirectories to the watcher
-            pathsToScan.insert(childPath, childItem);
+                pathsToScan.insert(childPath, childItem);
+            }
         }
-    }
     item->setCheckState(0, Qt::Unchecked);
 }
 
@@ -174,7 +174,7 @@ void MainWindow::constructScanTreeViewRecursively(QTreeWidgetItem *parentItem, Q
     // If a file or folder encountered already exists in the scan list,
     // join it to the directory item and remove the original item from the tree
     QTreeWidgetItem *existingItem = pathsToScan.value(currentPath);
-    QString shortName = currentPath.split(QDir::separator()).last();
+    QString shortName = currentPath.split("/").last();
     if (existingItem) {
         // Change name from full path to file/folder name only
         existingItem->setText(0, shortName);
@@ -193,22 +193,25 @@ void MainWindow::constructScanTreeViewRecursively(QTreeWidgetItem *parentItem, Q
     QDir dir(currentPath);
             foreach (const QString &entry,
                      dir.entryList(QDir::NoDotAndDotDot | QDir::Files | QDir::Dirs, QDir::DirsFirst)) {
-            QString childPath = currentPath + QDir::separator() + entry;
+            QString childPath = currentPath + "/" + entry;
             constructScanTreeViewRecursively(directoryItem, childPath, depth + 1, true);
         }
 }
 
 QString MainWindow::getParentPath(const QString &dirPath) {
-    qsizetype lastSeparatorIndex = dirPath.lastIndexOf(QDir::separator());
+    qsizetype lastSeparatorIndex = dirPath.lastIndexOf("/");
     QString parentPath = dirPath.left(lastSeparatorIndex);
     while (!parentPath.isEmpty()) {
         if (pathsToScan.contains(parentPath)) {
             auto *parentItem = pathsToScan.value(parentPath);
             return parentItem->data(0, Qt::UserRole).toString();
         }
-        parentPath = parentPath.left(parentPath.lastIndexOf(QDir::separator()));
+        auto lastIndex = parentPath.lastIndexOf("/");
+        if (lastIndex == -1)
+            parentPath = "";
+        else
+            parentPath = parentPath.left(lastIndex);
     }
-
     return {};
 }
 
@@ -258,7 +261,7 @@ QString formatFileSize(qint64 size) {
 }
 
 QTreeWidgetItem *MainWindow::createTreeItem(QTreeWidgetItem *parentItem, const QString &path, bool useShortName) {
-    QString shortName = useShortName ? path.split(QDir::separator()).last() : path;
+    QString shortName = useShortName ? path.split("/").last() : path;
     auto *item = new QTreeWidgetItem(parentItem, QStringList(shortName));
     // Set the parent
     item->setData(0, Qt::UserRole, path);
@@ -400,7 +403,7 @@ void MainWindow::on_scanButton_clicked() {
         widget->setLayout(layout);
         auto *checkBox = new QCheckBox();
         auto qstringPath = QString::fromStdString(match.first);
-        auto shortName = qstringPath.split(QDir::separator()).last(); // Get the file name only
+        auto shortName = qstringPath.split("/").last(); // Get the file name only
         auto *label = new QLabel(shortName);
         label->setTextInteractionFlags(Qt::TextSelectableByMouse);
         QFont font = label->font();
@@ -548,4 +551,3 @@ void MainWindow::on_deleteButton_clicked() {
     dialog->close();
     delete dialog;
 }
-

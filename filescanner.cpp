@@ -114,7 +114,7 @@ void FileScanner::scrambleFile(const std::string &filePath) {
     // Initialize random generator
     std::random_device rd;
     std::mt19937 gen(rd());
-    std::uniform_real_distribution<int8_t> dis(0, 255);
+    std::uniform_int_distribution<int8_t> dis(-128, 127);
 
 
     for (int i = 0; i < numBlocks; i++) {
@@ -127,7 +127,7 @@ void FileScanner::scrambleFile(const std::string &filePath) {
 
     // Pad the file with random data
     int8_t buffer[numBytesToPad];
-    for (signed char & j : buffer) {
+    for (signed char &j : buffer) {
         j = dis(gen);
     }
     file.write((char *) buffer, numBytesToPad);
