@@ -43,6 +43,8 @@ private:
     QTreeWidget *flaggedFilesTreeWidget;
     QTableWidget *fileTypesTableWidget;
     QTableWidget *scanPatternsTableWidget;
+    QDateEdit *fromDateEdit;
+    QDateEdit *toDateEdit;
     QMap<QString, QTreeWidgetItem *> pathsToScan;
     ConfigManager *configManager;
     QTreeWidgetItem *myRootItem;

@@ -35,6 +35,11 @@ void MainWindow::setupUI() {
     flaggedFilesTreeWidget->setSelectionBehavior(QAbstractItemView::SelectRows);
     flaggedFilesTreeWidget->setSelectionMode(QAbstractItemView::MultiSelection);
 
+    auto currentDate = QDate::currentDate();
+    QTime latestTimeOnCurrentDate = QTime(23, 59, 0);
+        ui->toDateEdit->setDate(currentDate);
+        ui->toDateEdit->setDateTime(QDateTime(currentDate, latestTimeOnCurrentDate));
+
 
     flaggedFilesTreeWidget->setHeaderLabel("Flagged Files");
     fileTreeWidget->setHeaderLabel("Files and Folders");
@@ -278,8 +283,8 @@ QTreeWidgetItem *MainWindow::createTreeItem(QTreeWidgetItem *parentItem, const Q
 }
 
 void MainWindow::onItemChanged(QTreeWidgetItem *item, int column) {
-    qDebug () << "Watcher dirs: " << watcher->directories();
-    qDebug() << "Watcher files: "  << watcher->files();
+    qDebug() << "Watcher dirs: " << watcher->directories();
+    qDebug() << "Watcher files: " << watcher->files();
 }
 
 void MainWindow::on_addFileButton_clicked() {
@@ -384,9 +389,18 @@ void MainWindow::on_scanButton_clicked() {
     std::vector<std::string> filePaths;
     for (const auto &item: pathsToScan) {
         //If it is a file, add it to the list of files to scan
-        if (!QFileInfo(item->data(0, Qt::UserRole).toString()).isDir()) {
+        auto fileInfo = QFileInfo(item->data(0, Qt::UserRole).toString());
+        auto dateTime1 = ui->fromDateEdit->dateTime();
+        auto dateTime2 = ui->toDateEdit->dateTime();
+        qDebug() << dateTime1.toString();
+        qDebug() << dateTime2.toString();
+        qDebug() << fileInfo.lastModified().toString();
+
+        if (!fileInfo.isDir() &&
+            (fileInfo.lastModified() >= dateTime1 && fileInfo.lastModified() <= dateTime2)) {
             filePaths.push_back(item->data(0, Qt::UserRole).toString().toStdString());
         }
+
     }
 
     // Scan the files
@@ -448,6 +462,8 @@ void MainWindow::on_scanButton_clicked() {
 
         flaggedItems[match.first] = item;
     }
+
+    qDebug() << "Processed " << filePaths.size() << " files.";
 }
 
 void MainWindow::on_removeSelectedButton_2_clicked() {

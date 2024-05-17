@@ -52,40 +52,48 @@ std::map<std::string, std::vector<MatchInfo>> FileScanner::scanFiles(const std::
     return matches;
 }
 
+
 std::vector<MatchInfo>
 FileScanner::scanFileForSensitiveData(const std::string &filePath, std::map<std::string, std::string> &patterns) {
-    // Scan a single file with regex for sensitive data
-    std::ifstream file(filePath);
+    std::ifstream file(filePath, std::ios::binary);
     if (!file.is_open()) {
         throw std::runtime_error("Could not open file for scanning.");
     }
 
     std::vector<MatchInfo> matches;
-
-    // Read file in chunks
     char buffer[CHUNK_SIZE];
-    memset(buffer, NULL, CHUNK_SIZE);
-    // Calculate num bytes to read so that we don't read more than in the file
-    long numBytesToRead = std::min((long) CHUNK_SIZE, (long) std::filesystem::file_size(filePath));
-    while (file.read(buffer, numBytesToRead)) {
-        if (matches.size() > MAX_NUM_MATCHES) {
+
+    while (file) {
+        // Read file in chunks
+        file.read(buffer, CHUNK_SIZE);
+        std::streamsize bytesRead = file.gcount();
+        if (bytesRead <= 0) {
             break;
         }
-        std::string chunk(buffer);
+
+        std::string chunk(buffer, bytesRead);
+
         for (const auto &pattern: patterns) {
             std::regex regex(pattern.first);
             std::smatch match;
-            if (std::regex_search(chunk, match, regex)) {
+            auto searchStart = chunk.cbegin();
+            while (std::regex_search(searchStart, chunk.cend(), match, regex)) {
                 // Sensitive data found
                 MatchInfo matchInfo;
                 matchInfo.patternUsed = std::make_pair(pattern.first, pattern.second);
                 matchInfo.match = match.str();
-                matchInfo.startIndex = match.position();
-                matchInfo.endIndex = match.position() + match.length();
+                matchInfo.startIndex = match.position() + std::distance(chunk.cbegin(), searchStart);
+                matchInfo.endIndex = matchInfo.startIndex + match.length();
                 matches.push_back(matchInfo);
+
+                if (matches.size() > MAX_NUM_MATCHES) {
+                    file.close();
+                    return matches;
+                }
+
+                searchStart = match.suffix().first;
             }
         }
-        memset(buffer, NULL, CHUNK_SIZE);
     }
 
     file.close();

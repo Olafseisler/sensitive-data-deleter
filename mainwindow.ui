@@ -30,7 +30,7 @@
     <item>
      <widget class="QTabWidget" name="tabWidget">
       <property name="currentIndex">
-       <number>0</number>
+       <number>1</number>
       </property>
       <widget class="QWidget" name="tab_3">
        <attribute name="title">
@@ -255,7 +255,7 @@
             <item>
              <layout class="QHBoxLayout" name="horizontalLayout_3">
               <property name="spacing">
-               <number>-1</number>
+               <number>4</number>
               </property>
               <item>
                <widget class="QPushButton" name="selectAllFlaggedButton">
@@ -392,7 +392,7 @@
                  </widget>
                 </item>
                 <item>
-                 <widget class="QDateEdit" name="dateEdit"/>
+                 <widget class="QDateEdit" name="fromDateEdit"/>
                 </item>
                 <item>
                  <widget class="QLabel" name="label_2">
@@ -402,7 +402,7 @@
                  </widget>
                 </item>
                 <item>
-                 <widget class="QDateEdit" name="dateEdit_2"/>
+                 <widget class="QDateEdit" name="toDateEdit"/>
                 </item>
                 <item>
                  <spacer name="horizontalSpacer">
