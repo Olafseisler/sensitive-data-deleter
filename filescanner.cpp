@@ -24,10 +24,14 @@ FileScanner::~FileScanner() {
     // Destructor
 }
 
-std::map<std::string, std::vector<MatchInfo>> FileScanner::scanFiles(const std::vector<std::string> &filePaths,
-                                                                     std::map<std::string, std::string> &patterns,
-                                                                     std::map<std::string, std::string> &fileTypes) {
+void
+FileScanner::scanFiles(QPromise<std::map<std::string, std::vector<MatchInfo>>> &promise,
+                            const std::vector<std::string>& filePaths,
+                            const std::map<std::string, std::string>& patterns,
+                            const std::map<std::string, std::string>& fileTypes) {
     // Scan files based on given patterns and file types
+    int progressIncrement = filePaths.size() / 100;
+    int progress = 0;
     std::map<std::string, std::vector<MatchInfo>> matches;
 
     for (const auto &filePath: filePaths) {
@@ -37,6 +41,8 @@ std::map<std::string, std::vector<MatchInfo>> FileScanner::scanFiles(const std::
                 break;
             }
         }
+        progress += progressIncrement;
+        promise.setProgressValue(progress/100);
 
         // If the file is not a text file based on MIME type, skip the file
         QString mimeType = QMimeDatabase().mimeTypeForFile(QString::fromStdString(filePath)).name();
@@ -47,14 +53,15 @@ std::map<std::string, std::vector<MatchInfo>> FileScanner::scanFiles(const std::
         std::vector<MatchInfo> fileMatches = scanFileForSensitiveData(filePath, patterns);
         if (!fileMatches.empty())
             matches[filePath] = fileMatches;
-    }
 
-    return matches;
+    }
+    promise.addResult(matches);
+    promise.setProgressValue(100);
+    promise.finish();
 }
 
-
 std::vector<MatchInfo>
-FileScanner::scanFileForSensitiveData(const std::string &filePath, std::map<std::string, std::string> &patterns) {
+FileScanner::scanFileForSensitiveData(const std::string &filePath, const std::map<std::string, std::string> &patterns) {
     std::ifstream file(filePath, std::ios::binary);
     if (!file.is_open()) {
         throw std::runtime_error("Could not open file for scanning.");
@@ -127,7 +134,7 @@ void FileScanner::scrambleFile(const std::string &filePath) {
 
     for (int i = 0; i < numBlocks; i++) {
         int8_t buffer[CHUNK_SIZE];
-        for (signed char & j : buffer) {
+        for (signed char &j: buffer) {
             j = dis(gen);
         }
         file.write((char *) buffer, CHUNK_SIZE);
@@ -135,7 +142,7 @@ void FileScanner::scrambleFile(const std::string &filePath) {
 
     // Pad the file with random data
     int8_t buffer[numBytesToPad];
-    for (signed char &j : buffer) {
+    for (signed char &j: buffer) {
         j = dis(gen);
     }
     file.write((char *) buffer, numBytesToPad);
@@ -144,7 +151,7 @@ void FileScanner::scrambleFile(const std::string &filePath) {
 }
 
 void FileScanner::deleteFiles(std::vector<std::string> &filePaths) {
-    std::vector<std::string*> filePaths2;
+    std::vector<std::string *> filePaths2;
     for (const auto &filePath: filePaths) {
         try {
             scrambleFile(filePath);

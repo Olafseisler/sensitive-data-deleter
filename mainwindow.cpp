@@ -3,6 +3,9 @@
 #include <QFileSystemModel>
 #include <QFileDialog>
 #include <QCheckBox>
+#include <QFutureWatcher>
+#include <QtConcurrent/QtConcurrentRun>
+#include <QProgressDialog>
 
 #define MAX_DEPTH 10
 
@@ -37,8 +40,8 @@ void MainWindow::setupUI() {
 
     auto currentDate = QDate::currentDate();
     QTime latestTimeOnCurrentDate = QTime(23, 59, 0);
-        ui->toDateEdit->setDate(currentDate);
-        ui->toDateEdit->setDateTime(QDateTime(currentDate, latestTimeOnCurrentDate));
+    ui->toDateEdit->setDate(currentDate);
+    ui->toDateEdit->setDateTime(QDateTime(currentDate, latestTimeOnCurrentDate));
 
 
     flaggedFilesTreeWidget->setHeaderLabel("Flagged Files");
@@ -368,45 +371,7 @@ MainWindow::createConfirmationDialog(const QString &title, const QString &labelT
     return dialog;
 }
 
-void MainWindow::on_scanButton_clicked() {
-    // Get all checked file types and patterns and convert them to std strings
-    std::map<std::string, std::string> checkedFileTypes;
-    for (int i = 0; i < fileTypesTableWidget->rowCount(); ++i) {
-        if (fileTypesTableWidget->item(i, 0)->checkState() == Qt::Checked) {
-            checkedFileTypes[fileTypesTableWidget->item(i, 1)->text().toStdString()] =
-                    fileTypesTableWidget->item(i, 2)->text().toStdString();
-        }
-    }
-    std::map<std::string, std::string> checkedScanPatterns;
-    for (int i = 0; i < scanPatternsTableWidget->rowCount(); ++i) {
-        if (scanPatternsTableWidget->item(i, 0)->checkState() == Qt::Checked) {
-            checkedScanPatterns[scanPatternsTableWidget->item(i, 1)->text().toStdString()] =
-                    scanPatternsTableWidget->item(i, 2)->text().toStdString();
-        }
-    }
-
-    // Get all files in pathsToScan
-    std::vector<std::string> filePaths;
-    for (const auto &item: pathsToScan) {
-        //If it is a file, add it to the list of files to scan
-        auto fileInfo = QFileInfo(item->data(0, Qt::UserRole).toString());
-        auto dateTime1 = ui->fromDateEdit->dateTime();
-        auto dateTime2 = ui->toDateEdit->dateTime();
-        qDebug() << dateTime1.toString();
-        qDebug() << dateTime2.toString();
-        qDebug() << fileInfo.lastModified().toString();
-
-        if (!fileInfo.isDir() &&
-            (fileInfo.lastModified() >= dateTime1 && fileInfo.lastModified() <= dateTime2)) {
-            filePaths.push_back(item->data(0, Qt::UserRole).toString().toStdString());
-        }
-
-    }
-
-    // Scan the files
-    auto matches = fileScanner->scanFiles(filePaths, checkedScanPatterns, checkedFileTypes);
-    // Delete all existing items in the flagged files tree widget then show new ones
-    flaggedFilesTreeWidget->clear();
+void MainWindow::processScanResults(std::map<std::string, std::vector<MatchInfo>> &matches) {
     for (const auto &match: matches) {
         // Create a QWidget with a QHBoxLayout, workaround for selectable text in QTreeWidget
         auto *item = new QTreeWidgetItem(flaggedFilesTreeWidget);
@@ -462,8 +427,71 @@ void MainWindow::on_scanButton_clicked() {
 
         flaggedItems[match.first] = item;
     }
+    qDebug() << "Asynchronous task completed. Results processed.";
+}
 
-    qDebug() << "Processed " << filePaths.size() << " files.";
+void MainWindow::on_scanButton_clicked() {
+    // Get all checked file types and patterns and convert them to std strings
+    std::map<std::string, std::string> checkedFileTypes;
+    for (int i = 0; i < fileTypesTableWidget->rowCount(); ++i) {
+        if (fileTypesTableWidget->item(i, 0)->checkState() == Qt::Checked) {
+            checkedFileTypes[fileTypesTableWidget->item(i, 1)->text().toStdString()] =
+                    fileTypesTableWidget->item(i, 2)->text().toStdString();
+        }
+    }
+    std::map<std::string, std::string> checkedScanPatterns;
+    for (int i = 0; i < scanPatternsTableWidget->rowCount(); ++i) {
+        if (scanPatternsTableWidget->item(i, 0)->checkState() == Qt::Checked) {
+            checkedScanPatterns[scanPatternsTableWidget->item(i, 1)->text().toStdString()] =
+                    scanPatternsTableWidget->item(i, 2)->text().toStdString();
+        }
+    }
+
+    // Get all files in pathsToScan
+    std::vector<std::string> filePaths;
+    for (const auto &item: pathsToScan) {
+        //If it is a file, add it to the list of files to scan
+        auto fileInfo = QFileInfo(item->data(0, Qt::UserRole).toString());
+        auto dateTime1 = ui->fromDateEdit->dateTime();
+        auto dateTime2 = ui->toDateEdit->dateTime();
+
+        if (!fileInfo.isDir() &&
+            (fileInfo.lastModified() >= dateTime1 && fileInfo.lastModified() <= dateTime2)) {
+            filePaths.push_back(item->data(0, Qt::UserRole).toString().toStdString());
+        }
+
+    }
+
+    // Scan the files in a separate thread,
+    auto *futureWatcher = new QFutureWatcher<std::map<std::string, std::vector<MatchInfo>>>(this);
+
+    if (futureWatcher->isRunning()) {
+        return;
+    }
+    auto future = QtConcurrent::run(&FileScanner::scanFiles, filePaths, checkedScanPatterns, checkedFileTypes);
+    futureWatcher->setFuture(future);
+
+    auto *progressDialog = new QProgressDialog("Scanning in progress", "Cancel", 0, 100);
+    progressDialog->setAutoReset(false);
+    QObject::connect(progressDialog, &QProgressDialog::canceled,[futureWatcher, progressDialog]() {
+        futureWatcher->future().cancel();
+        progressDialog->close();
+        progressDialog->deleteLater();
+        futureWatcher->deleteLater();
+    });
+
+    QObject::connect(futureWatcher, &QFutureWatcher<std::map<std::string, std::vector<MatchInfo>>>::progressValueChanged, [this, progressDialog](int progress) {
+        // Update progress
+        qDebug() << "Showing progress " << progress;
+        progressDialog->setValue(progress);
+    });
+
+    QObject::connect(futureWatcher, &QFutureWatcher<std::map<std::string, std::vector<MatchInfo>>>::finished,[futureWatcher, this, &filePaths]() {
+        if (futureWatcher->future().isCanceled()) {return;}
+        auto results = futureWatcher->result();  // Get the results when finished
+        processScanResults(results); // Process results here
+        qDebug() << "Processed " << filePaths.size() << " files.";
+    });
 }
 
 void MainWindow::on_removeSelectedButton_2_clicked() {

@@ -65,6 +65,8 @@ private:
     QTreeWidgetItem* findItemForPath(QTreeWidget* treeWidget, const QString& path);
     QTreeWidgetItem* findItemForPath(QTreeWidgetItem* parentItem, const QString& path);
     QDialog* createConfirmationDialog(const QString &title, const QString &labelText, const QString &buttonText);
+    QDialog* createProgressDialog(std::string &title, std::string content);
+    void processScanResults(std::map<std::string, std::vector<MatchInfo>> &matches);
 };
 
 

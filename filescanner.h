@@ -10,6 +10,7 @@
 #include <regex>
 #include <map>
 #include <utility>
+#include <QPromise>
 
 struct MatchInfo {
     std::pair<std::string, std::string> patternUsed;
@@ -22,11 +23,17 @@ class FileScanner {
 public:
     FileScanner();
     ~FileScanner();
-    std::map<std::string, std::vector<MatchInfo>> scanFiles(const std::vector<std::string> &filePaths,
-                                                                std::map<std::string, std::string> &patterns,
-                                                                std::map<std::string, std::string> &fileTypes);
-    std::vector<MatchInfo> scanFileForSensitiveData(const std::string &filePath, std::map<std::string, std::string> &patterns);
+
+    static void scanFiles(QPromise<std::map<std::string, std::vector<MatchInfo>>> &promise,
+                  const std::vector<std::string>& filePaths,
+                  const std::map<std::string, std::string>& patterns,
+                  const std::map<std::string, std::string>& fileTypes);
+
+    static std::vector<MatchInfo>
+    scanFileForSensitiveData(const std::string &filePath, const std::map<std::string, std::string> &patterns);
+
     void deleteFiles(std::vector<std::string> &filePaths);
+
     void scrambleFile(const std::string &filePath);
 
 };
