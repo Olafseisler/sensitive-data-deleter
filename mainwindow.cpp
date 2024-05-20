@@ -462,6 +462,7 @@ void MainWindow::on_scanButton_clicked() {
 
     }
 
+    flaggedFilesTreeWidget->clear();
     // Scan the files in a separate thread,
     auto *futureWatcher = new QFutureWatcher<std::map<std::string, std::vector<MatchInfo>>>(this);
 
@@ -486,10 +487,12 @@ void MainWindow::on_scanButton_clicked() {
         progressDialog->setValue(progress);
     });
 
-    QObject::connect(futureWatcher, &QFutureWatcher<std::map<std::string, std::vector<MatchInfo>>>::finished,[futureWatcher, this, &filePaths]() {
+    QObject::connect(futureWatcher, &QFutureWatcher<std::map<std::string, std::vector<MatchInfo>>>::finished,[futureWatcher, this, &filePaths, progressDialog]() {
         if (futureWatcher->future().isCanceled()) {return;}
+        progressDialog->setLabelText("Constructing results...");
         auto results = futureWatcher->result();  // Get the results when finished
         processScanResults(results); // Process results here
+        progressDialog->setLabelText("Done.");
         qDebug() << "Processed " << filePaths.size() << " files.";
     });
 }

@@ -30,8 +30,7 @@ FileScanner::scanFiles(QPromise<std::map<std::string, std::vector<MatchInfo>>> &
                             const std::map<std::string, std::string>& patterns,
                             const std::map<std::string, std::string>& fileTypes) {
     // Scan files based on given patterns and file types
-    int progressIncrement = filePaths.size() / 100;
-    int progress = 0;
+    int i = 0;
     std::map<std::string, std::vector<MatchInfo>> matches;
 
     for (const auto &filePath: filePaths) {
@@ -41,8 +40,7 @@ FileScanner::scanFiles(QPromise<std::map<std::string, std::vector<MatchInfo>>> &
                 break;
             }
         }
-        progress += progressIncrement;
-        promise.setProgressValue(progress/100);
+        promise.setProgressValue(static_cast<int>((100 * i) / filePaths.size()));
 
         // If the file is not a text file based on MIME type, skip the file
         QString mimeType = QMimeDatabase().mimeTypeForFile(QString::fromStdString(filePath)).name();
@@ -53,7 +51,7 @@ FileScanner::scanFiles(QPromise<std::map<std::string, std::vector<MatchInfo>>> &
         std::vector<MatchInfo> fileMatches = scanFileForSensitiveData(filePath, patterns);
         if (!fileMatches.empty())
             matches[filePath] = fileMatches;
-
+        ++i;
     }
     promise.addResult(matches);
     promise.setProgressValue(100);
