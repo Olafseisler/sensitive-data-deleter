@@ -36,6 +36,7 @@ private slots:
     void on_scanButton_clicked();
     void on_selectAllFlaggedButton_clicked();
     void on_unflagSelectedButton_clicked();
+    void on_addPatternButton_clicked();
     void on_deleteButton_clicked();
 
 private:
@@ -65,7 +66,6 @@ private:
     QTreeWidgetItem* findItemForPath(QTreeWidget* treeWidget, const QString& path);
     QTreeWidgetItem* findItemForPath(QTreeWidgetItem* parentItem, const QString& path);
     QDialog* createConfirmationDialog(const QString &title, const QString &labelText, const QString &buttonText);
-    QDialog* createProgressDialog(std::string &title, std::string content);
     void processScanResults(std::map<std::string, std::vector<MatchInfo>> &matches);
 };
 

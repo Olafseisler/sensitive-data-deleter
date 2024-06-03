@@ -1,0 +1,62 @@
+{
+    "fileTypes": [
+        {
+            "description": "Comma-separated values",
+            "fileType": ".csv"
+        },
+        {
+            "description": "Plain text",
+            "fileType": ".txt"
+        }
+    ],
+    "scanPatterns": [
+        {
+            "description": "Email address",
+            "pattern": "[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Z|a-z]{2,}"
+        },
+        {
+            "description": "Estonian phone number",
+            "pattern": "\\b(\\+?372\\s?)?[3-9](?:[- ]?\\d){6,7}\\b"
+        },
+        {
+            "description": "Estonian personal code",
+            "pattern": "\\b[1-6][0-9][0-9][0-1][1-9][0-3][1-9]\\d{4}\\b"
+        },
+        {
+            "description": "",
+            "pattern": ""
+        },
+        {
+            "description": "",
+            "pattern": ""
+        },
+        {
+            "description": "",
+            "pattern": ""
+        },
+        {
+            "description": "Estonian personal code",
+            "pattern": "\\b[1-6][0-9][0-9][0-1][1-9][0-3][1-9]\\d{4}\\b"
+        },
+        {
+            "description": "Estonian phone number",
+            "pattern": "\\b(\\+?372\\s?)?[3-9](?:[- ]?\\d){6,7}\\b"
+        },
+        {
+            "description": "Email address",
+            "pattern": "[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Z|a-z]{2,}"
+        },
+        {
+            "description": "",
+            "pattern": ""
+        },
+        {
+            "description": "",
+            "pattern": "yeet"
+        },
+        {
+            "description": "lmao",
+            "pattern": "yeet"
+        }
+    ]
+}

@@ -30,7 +30,7 @@
     <item>
      <widget class="QTabWidget" name="tabWidget">
       <property name="currentIndex">
-       <number>1</number>
+       <number>0</number>
       </property>
       <widget class="QWidget" name="tab_3">
        <attribute name="title">
@@ -247,7 +247,7 @@
               <property name="sizeHint" stdset="0">
                <size>
                 <width>20</width>
-                <height>8</height>
+                <height>4</height>
                </size>
               </property>
              </spacer>
@@ -381,7 +381,10 @@
              </widget>
             </item>
             <item>
-             <layout class="QVBoxLayout" name="verticalLayout_6">
+             <layout class="QVBoxLayout" name="verticalLayout_6" stretch="0,0">
+              <property name="sizeConstraint">
+               <enum>QLayout::SetDefaultConstraint</enum>
+              </property>
               <item>
                <layout class="QHBoxLayout" name="horizontalLayout_5">
                 <item>
@@ -468,6 +471,13 @@
                </widget>
               </item>
               <item>
+               <widget class="QPushButton" name="addPatternButton">
+                <property name="text">
+                 <string>Add Pattern</string>
+                </property>
+               </widget>
+              </item>
+              <item>
                <spacer name="horizontalSpacer_2">
                 <property name="orientation">
                  <enum>Qt::Horizontal</enum>
@@ -481,22 +491,6 @@
                </spacer>
               </item>
              </layout>
-            </item>
-            <item>
-             <spacer name="verticalSpacer">
-              <property name="orientation">
-               <enum>Qt::Vertical</enum>
-              </property>
-              <property name="sizeType">
-               <enum>QSizePolicy::Fixed</enum>
-              </property>
-              <property name="sizeHint" stdset="0">
-               <size>
-                <width>20</width>
-                <height>8</height>
-               </size>
-              </property>
-             </spacer>
             </item>
             <item>
              <widget class="QTableWidget" name="scanPatternsTableWidget">

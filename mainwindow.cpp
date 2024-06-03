@@ -38,6 +38,8 @@ void MainWindow::setupUI() {
     flaggedFilesTreeWidget->setSelectionBehavior(QAbstractItemView::SelectRows);
     flaggedFilesTreeWidget->setSelectionMode(QAbstractItemView::MultiSelection);
 
+    scanPatternsTableWidget->setColumnCount(4);
+
     auto currentDate = QDate::currentDate();
     QTime latestTimeOnCurrentDate = QTime(23, 59, 0);
     ui->toDateEdit->setDate(currentDate);
@@ -64,16 +66,34 @@ void MainWindow::setupUI() {
     fileTypesTableWidget->setColumnWidth(2, fileTypesTableWidget->width() * 0.3);
     fileTypesTableWidget->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Stretch);
 
-    QMap<QString, QString> scanPatterns = configManager->getScanPatterns();
-            foreach (const auto &scanPattern, scanPatterns.keys()) {
-            scanPatternsTableWidget->insertRow(scanPatternsTableWidget->rowCount());
+    QList<QPair<QString, QString>> scanPatterns = configManager->getScanPatterns();
+            foreach (const auto &scanPattern, scanPatterns) {
+            int row = scanPatternsTableWidget->rowCount();
+            scanPatternsTableWidget->insertRow(row);
+
             auto *checkBox = new QTableWidgetItem();
             checkBox->setCheckState(Qt::Checked);
-            scanPatternsTableWidget->setItem(scanPatternsTableWidget->rowCount() - 1, 0, checkBox);
-            scanPatternsTableWidget->setItem(scanPatternsTableWidget->rowCount() - 1, 1,
-                                             new QTableWidgetItem(scanPattern));
-            scanPatternsTableWidget->setItem(scanPatternsTableWidget->rowCount() - 1, 2,
-                                             new QTableWidgetItem(scanPatterns[scanPattern]));
+            scanPatternsTableWidget->setItem(row, 0, checkBox);
+            scanPatternsTableWidget->setItem(row, 1, new QTableWidgetItem(scanPattern.first));
+            scanPatternsTableWidget->setItem(row, 2, new QTableWidgetItem(scanPattern.second));
+
+            // Add a button to the column to the right to remove the row
+            auto *removeButton = new QPushButton("Remove");
+            scanPatternsTableWidget->setCellWidget(row, 3, removeButton);
+
+            // Connect the button to the slot to remove the row
+            connect(removeButton, &QPushButton::clicked, this, [this, row]() {
+                auto *confirmationDialog = createConfirmationDialog("Remove Scan Pattern",
+                                                                    "Are you sure you want to remove this scan pattern?",
+                                                                    "Remove");
+                if (confirmationDialog->result() == QDialog::Rejected) {
+                    return;
+                }
+
+                this->scanPatternsTableWidget->removeRow(row);
+                auto patternToRemove = this->scanPatternsTableWidget->item(row, 1)->text();
+                this->configManager->removeScanPattern(patternToRemove);
+            });
         }
 
     scanPatternsTableWidget->horizontalHeader()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
@@ -82,8 +102,38 @@ void MainWindow::setupUI() {
 
     // Set the file types table to not be editable
     fileTypesTableWidget->setEditTriggers(QAbstractItemView::NoEditTriggers);
-//    connect(fileTreeWidget, &QTreeWidget::itemChanged, this, &MainWindow::onItemChanged);
     connect(watcher, &QFileSystemWatcher::directoryChanged, this, &MainWindow::onDirectoryChanged);
+    // Update the config file if any item in fileTypesTableWidget is edited
+    connect(scanPatternsTableWidget, &QTableWidget::itemChanged, [this](QTableWidgetItem *item) {
+        qDebug() << item->text();
+        qDebug() << item->row();
+        auto *column1 = scanPatternsTableWidget->item(item->row(), 1);
+        auto *column2 = scanPatternsTableWidget->item(item->row(), 2);
+
+        if (column1 == nullptr || column2 == nullptr || column1->text().isEmpty() || column2->text().isEmpty()){
+            return;
+        }
+
+        if (!configManager->isValidRegex(column1->text())) {
+            qDebug() << "The scan pattern is not a valid regex expression.";
+            return;
+        }
+
+        // Check if the scan pattern already exists
+        for (int i = 0; i < scanPatternsTableWidget->rowCount(); ++i) {
+            if (i == item->row()) {
+                continue;
+            }
+            if (scanPatternsTableWidget->item(i, 1)->text() == column1->text()) {
+                qDebug() << "The scan pattern already exists.";
+                return;
+            }
+        }
+
+        QString newScanPattern = column1->text();
+        QString newDescription = column2->text();
+        configManager->editScanPattern(item->row(), newScanPattern, newDescription);
+    });
 }
 
 void MainWindow::onDirectoryChanged(const QString &path) {
@@ -255,16 +305,15 @@ void MainWindow::on_addFolderButton_clicked() {
 }
 
 QString formatFileSize(qint64 size) {
-    // Switch on the order of magnitude of the file size
-    switch (size) {
-        case 0 ... 1023:
-            return QString::number(size) + " B";
-        case 1024 ... 1048575:
-            return QString::number(size / 1024) + " KB";
-        case 1048576 ... 1073741823:
-            return QString::number(size / 1048576) + " MB";
-        default:
-            return QString::number(size / 1073741824) + " GB";
+    // Use if-else statements to check the order of magnitude of the file size
+    if (size >= 0 && size <= 1023) {
+        return QString::number(size) + " B";
+    } else if (size >= 1024 && size <= 1048575) {
+        return QString::number(size / 1024) + " KB";
+    } else if (size >= 1048576 && size <= 1073741823) {
+        return QString::number(size / 1048576) + " MB";
+    } else {
+        return QString::number(size / 1073741824) + " GB";
     }
 }
 
@@ -474,27 +523,30 @@ void MainWindow::on_scanButton_clicked() {
 
     auto *progressDialog = new QProgressDialog("Scanning in progress", "Cancel", 0, 100);
     progressDialog->setAutoReset(false);
-    QObject::connect(progressDialog, &QProgressDialog::canceled,[futureWatcher, progressDialog]() {
+    QObject::connect(progressDialog, &QProgressDialog::canceled, [futureWatcher, progressDialog]() {
         futureWatcher->future().cancel();
         progressDialog->close();
         progressDialog->deleteLater();
         futureWatcher->deleteLater();
     });
 
-    QObject::connect(futureWatcher, &QFutureWatcher<std::map<std::string, std::vector<MatchInfo>>>::progressValueChanged, [this, progressDialog](int progress) {
-        // Update progress
-        qDebug() << "Showing progress " << progress;
-        progressDialog->setValue(progress);
-    });
+    QObject::connect(futureWatcher,
+                     &QFutureWatcher<std::map<std::string, std::vector<MatchInfo>>>::progressValueChanged,
+                     [this, progressDialog](int progress) {
+                         // Update progress
+                         progressDialog->setValue(progress);
+                     });
 
-    QObject::connect(futureWatcher, &QFutureWatcher<std::map<std::string, std::vector<MatchInfo>>>::finished,[futureWatcher, this, &filePaths, progressDialog]() {
-        if (futureWatcher->future().isCanceled()) {return;}
-        progressDialog->setLabelText("Constructing results...");
-        auto results = futureWatcher->result();  // Get the results when finished
-        processScanResults(results); // Process results here
-        progressDialog->setLabelText("Done.");
-        qDebug() << "Processed " << filePaths.size() << " files.";
-    });
+    QObject::connect(futureWatcher, &QFutureWatcher<std::map<std::string, std::vector<MatchInfo>>>::finished,
+                     [futureWatcher, this, &filePaths, progressDialog]() {
+                         if (futureWatcher->future().isCanceled()) { return; }
+                         progressDialog->setValue(100);
+                         progressDialog->setLabelText("Constructing results...");
+                         auto results = futureWatcher->result();  // Get the results when finished
+                         processScanResults(results); // Process results here
+                         progressDialog->setLabelText("Done.");
+                         qDebug() << "Processed " << filePaths.size() << " files.";
+                     });
 }
 
 void MainWindow::on_removeSelectedButton_2_clicked() {
@@ -598,3 +650,54 @@ void MainWindow::on_deleteButton_clicked() {
     dialog->close();
     delete dialog;
 }
+
+void MainWindow::on_addPatternButton_clicked() {
+    // Add a new row to the scan patterns table
+    int row = scanPatternsTableWidget->rowCount();
+    scanPatternsTableWidget->insertRow(row);
+
+    // Initialize the new checkbox item with check state
+    auto *newCheckBox = new QTableWidgetItem("");
+    newCheckBox->setFlags(newCheckBox->flags() | Qt::ItemIsUserCheckable); // Ensure the item is checkable
+    newCheckBox->setCheckState(Qt::Unchecked); // Initialize with unchecked state
+
+    // Debug output to verify item initialization
+    qDebug() << "Inserting new item at row:" << row << "with initial check state:" << newCheckBox->checkState();
+
+    // Set the new checkbox item in the first column
+    scanPatternsTableWidget->setItem(row, 0, newCheckBox);
+
+    // Add other items to the new row
+    scanPatternsTableWidget->setItem(row, 1, new QTableWidgetItem(""));
+    scanPatternsTableWidget->setItem(row, 2, new QTableWidgetItem(""));
+
+    // Set the new row to be checked by default
+    scanPatternsTableWidget->item(row, 0)->setCheckState(Qt::Checked);
+    // Add a remove button to the new row
+    auto *removeButton = new QPushButton("Remove");
+    scanPatternsTableWidget->setCellWidget(row, 3, removeButton);
+
+    // Connect the button to the slot to remove the row
+    connect(removeButton, &QPushButton::clicked, this, [this, row]() {
+        auto *confirmationDialog = createConfirmationDialog("Remove Scan Pattern",
+                                                            "Are you sure you want to remove this scan pattern?",
+                                                            "Remove");
+        if (confirmationDialog->result() == QDialog::Rejected) {
+            return;
+        }
+
+        this->scanPatternsTableWidget->removeRow(row);
+        auto patternToRemove = this->scanPatternsTableWidget->item(row, 1)->text();
+        this->configManager->removeScanPattern(patternToRemove);
+    });
+
+    // Start typing in the new row
+    scanPatternsTableWidget->editItem(scanPatternsTableWidget->item(row, 1));
+
+    // Debug output to verify item state after modification
+    qDebug() << "New item at row:" << row << "with final check state:"
+             << scanPatternsTableWidget->item(row, 0)->checkState();
+}
+
+
+

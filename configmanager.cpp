@@ -9,6 +9,8 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonArray>
+#include <regex>
+
 #include "configmanager.h"
 
 ConfigManager::ConfigManager() {
@@ -23,15 +25,15 @@ ConfigManager::ConfigManager() {
     file.close();
 
     if (candidatePath.isEmpty()) {
-        throw std::runtime_error("Configpath.txt is empty");
+        throw std::runtime_error("configpath.txt is empty");
     }
 
     QList<QString> parts = candidatePath.split("=");
     if (parts.size() != 2) {
-        throw std::runtime_error("Configpath.txt is not formatted correctly");
+        throw std::runtime_error("configpath.txt is not formatted correctly");
     }
     if (parts[0] != "CONFIG_FILE_PATH") {
-        throw std::runtime_error("Configpath.txt is not formatted correctly");
+        throw std::runtime_error("configpath.txt is not formatted correctly");
     }
     if (parts[1].isEmpty()) {
         throw std::runtime_error("The config file path is empty. Please specify a path in configpath.txt.");
@@ -87,7 +89,12 @@ void ConfigManager::loadConfigFromFile(QString &path) {
             QJsonObject obj = value.toObject();
             QString scanPattern = obj["pattern"].toString();
             QString description = obj["description"].toString();
-            this->scanPatterns.insert(scanPattern, description);
+
+            if (!isValidRegex(scanPattern)) {
+               qDebug() << "The scan pattern is not a valid regex expression.";
+               continue;
+            }
+            this->scanPatterns.append(qMakePair(scanPattern, description));
         }
     }
 }
@@ -103,12 +110,18 @@ void ConfigManager::removeFileType(QString &fileType) {
 }
 
 void ConfigManager::addNewScanPattern(QString &scanPattern, QString &description) {
-    scanPatterns.insert(scanPattern, description);
+    scanPatterns.append(qMakePair(scanPattern, description));
     updateConfigFile();
 }
 
 void ConfigManager::removeScanPattern(QString &scanPattern) {
-    scanPatterns.remove(scanPattern);
+    for (size_t i = 0; i < scanPatterns.size(); i++) {
+        if (scanPatterns[i].first == scanPattern) {
+            scanPatterns.removeAt(i);
+            break;
+        }
+    }
+
     updateConfigFile();
 }
 
@@ -123,10 +136,10 @@ void ConfigManager::updateConfigFile() {
         fileTypeObj["description"] = fileTypes[fileType];
         fileTypesArray.append(fileTypeObj);
     }
-    for (const auto & scanPattern : scanPatterns.keys()) {
+    for (const auto & scanPattern : scanPatterns) {
         QJsonObject scanPatternObj;
-        scanPatternObj["pattern"] = scanPattern;
-        scanPatternObj["description"] = scanPatterns[scanPattern];
+        scanPatternObj["pattern"] = scanPattern.first;
+        scanPatternObj["description"] = scanPattern.second;
         scanPatternsArray.append(scanPatternObj);
     }
 
@@ -142,15 +155,40 @@ void ConfigManager::updateConfigFile() {
 
     QTextStream out(&file);
     out << doc.toJson();
+
     file.close();
+    loadConfigFromFile(configFilePath);
+}
+
+void ConfigManager::editScanPattern(int index, QString &scanPattern, QString &description) {
+    if (!isValidRegex(scanPattern)) {
+        qDebug() << "The scan pattern is not a valid regex expression.";
+        return;
+    }
+
+    if (index == scanPatterns.size()) {
+        scanPatterns.append(qMakePair(scanPattern, description));
+    } else {
+        scanPatterns[index] = qMakePair(scanPattern, description);
+    }
 }
 
 QMap<QString, QString> ConfigManager::getFileTypes() {
     return fileTypes;
 }
 
-QMap<QString, QString> ConfigManager::getScanPatterns() {
+QList<QPair<QString, QString>> ConfigManager::getScanPatterns() {
     return scanPatterns;
+}
+
+// Check if a string represents a valid c++ regex expression
+bool ConfigManager::isValidRegex(QString pattern) {
+    try {
+        std::regex re(pattern.toStdString());
+    } catch (std::regex_error &e) {
+        return false;
+    }
+    return true;
 }
 
 

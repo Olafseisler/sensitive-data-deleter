@@ -19,14 +19,16 @@ public:
     void removeFileType(QString &fileType);
     void addNewScanPattern(QString &scanPattern, QString &description);
     void removeScanPattern(QString &scanPattern);
+    void editScanPattern(int index, QString &scanPattern, QString &description);
+    bool isValidRegex(QString pattern);
     QMap<QString, QString> getFileTypes();
-    QMap<QString, QString> getScanPatterns();
+    QList<QPair<QString, QString>> getScanPatterns();
     void updateConfigFile();
 
 private:
     QString configFilePath;
     QMap<QString, QString> fileTypes;
-    QMap<QString, QString> scanPatterns;
+    QList<QPair<QString, QString>> scanPatterns;
 
 };
 
