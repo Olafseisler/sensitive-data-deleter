@@ -55,5 +55,6 @@ test/test_runner
 /CMakeLists.txt.user
 /.idea/untitled.iml
 
-# Ignore all folders that contain the phrase "TestFolder"
-**/TestFolder/*
+
+# Ignore all folders that contain "Deploy" in their name
+**/Deploy*/

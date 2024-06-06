@@ -7,7 +7,6 @@
 #include <filesystem>
 #include <QMimeType>
 #include <QMimeDatabase>
-#include <filesystem>
 #include <random>
 #include <iostream>
 
@@ -59,7 +58,7 @@ FileScanner::scanFiles(QPromise<std::map<std::string, std::vector<MatchInfo>>> &
 }
 
 std::vector<MatchInfo>
-FileScanner::scanFileForSensitiveData(const std::string &filePath, const std::map<std::string, std::string> &patterns) {
+FileScanner::scanFileForSensitiveData(const std::filesystem::path &filePath, const std::map<std::string, std::string> &patterns) {
     std::ifstream file(filePath, std::ios::binary);
     if (!file.is_open()) {
         throw std::runtime_error("Could not open file for scanning.");

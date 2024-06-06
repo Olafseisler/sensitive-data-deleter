@@ -11,6 +11,7 @@
 #include <map>
 #include <utility>
 #include <QPromise>
+#include <filesystem>
 
 struct MatchInfo {
     std::pair<std::string, std::string> patternUsed;
@@ -30,7 +31,7 @@ public:
                   const std::map<std::string, std::string>& fileTypes);
 
     static std::vector<MatchInfo>
-    scanFileForSensitiveData(const std::string &filePath, const std::map<std::string, std::string> &patterns);
+    scanFileForSensitiveData(const std::filesystem::path &filePath, const std::map<std::string, std::string> &patterns);
 
     void deleteFiles(std::vector<std::string> &filePaths);
 
