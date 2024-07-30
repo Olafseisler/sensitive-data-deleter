@@ -1,4 +1,4 @@
-#include "MainWindow.h"
+#include "mainwindow.h"
 #include <QDir>
 #include <QFileSystemModel>
 #include <QFileDialog>
@@ -77,6 +77,9 @@ void MainWindow::setupUI() {
             scanPatternsTableWidget->setItem(row, 1, new QTableWidgetItem(scanPattern.first));
             scanPatternsTableWidget->setItem(row, 2, new QTableWidgetItem(scanPattern.second));
 
+            // Set title for 4th column
+            scanPatternsTableWidget->setHorizontalHeaderItem(3, new QTableWidgetItem(""));
+
             // Add a button to the column to the right to remove the row
             auto *removeButton = new QPushButton("Remove");
             scanPatternsTableWidget->setCellWidget(row, 3, removeButton);
@@ -110,7 +113,7 @@ void MainWindow::setupUI() {
         auto *column1 = scanPatternsTableWidget->item(item->row(), 1);
         auto *column2 = scanPatternsTableWidget->item(item->row(), 2);
 
-        if (column1 == nullptr || column2 == nullptr || column1->text().isEmpty() || column2->text().isEmpty()){
+        if (column1 == nullptr || column2 == nullptr || column1->text().isEmpty() || column2->text().isEmpty()) {
             return;
         }
 
@@ -152,7 +155,7 @@ void MainWindow::onDirectoryChanged(const QString &path) {
         }
     }
 
-    QTreeWidgetItem *scanItem = pathsToScan.value(path);
+    QTreeWidgetItem * scanItem = pathsToScan.value(path);
     if (scanItem) {
         updateTreeItem(scanItem, path);
         if (path == lastUpdatedPath) {
@@ -177,7 +180,7 @@ void MainWindow::updateTreeItem(QTreeWidgetItem *item, const QString &path) {
                      dir.entryList(QDir::NoDotAndDotDot | QDir::Files | QDir::Dirs, QDir::DirsFirst)) {
 
             QString childPath = path + "/" + entry;
-            QTreeWidgetItem *childItem = pathsToScan.value(childPath);
+            QTreeWidgetItem * childItem = pathsToScan.value(childPath);
             if (!childItem) {
                 childItem = createTreeItem(item, childPath, true);
             }
@@ -198,10 +201,10 @@ QTreeWidgetItem *MainWindow::findItemForPath(QTreeWidgetItem *parentItem, const 
 
     // Recursively search in child items
     for (int i = 0; i < parentItem->childCount(); ++i) {
-        QTreeWidgetItem *childItem = parentItem->child(i);
+        QTreeWidgetItem * childItem = parentItem->child(i);
         // If child is a directory, search in it
         if (QFileInfo(childItem->text(0)).isDir()) {
-            QTreeWidgetItem *foundItem = findItemForPath(childItem, path);
+            QTreeWidgetItem * foundItem = findItemForPath(childItem, path);
             if (foundItem) {
                 return foundItem;
             }
@@ -222,7 +225,7 @@ QTreeWidgetItem *MainWindow::findItemForPath(QTreeWidget *treeWidget, const QStr
 }
 
 
-void MainWindow::constructScanTreeViewRecursively(QTreeWidgetItem *parentItem, QString &currentPath,
+void MainWindow::constructScanTreeViewRecursively(QTreeWidgetItem *parentItem, const QString &currentPath,
                                                   int depth, bool useShortName) {
     if (depth > MAX_DEPTH) {
         qWarning() << "Max depth reached. Cannot scan further than " << MAX_DEPTH << " levels deep";
@@ -231,7 +234,7 @@ void MainWindow::constructScanTreeViewRecursively(QTreeWidgetItem *parentItem, Q
 
     // If a file or folder encountered already exists in the scan list,
     // join it to the directory item and remove the original item from the tree
-    QTreeWidgetItem *existingItem = pathsToScan.value(currentPath);
+    QTreeWidgetItem * existingItem = pathsToScan.value(currentPath);
     QString shortName = currentPath.split("/").last();
     if (existingItem) {
         // Change name from full path to file/folder name only
@@ -285,17 +288,63 @@ void MainWindow::on_addFolderButton_clicked() {
         return;
     }
 
+    auto *futureWatcher = new QFutureWatcher<void>(this);
+
     // Existing parent directory, append the new directory to the parent tree
     auto parentPath = getParentPath(dirPath);
     if (!parentPath.isEmpty()) {
         auto *parentItem = pathsToScan.value(parentPath);
-        constructScanTreeViewRecursively(parentItem, dirPath);
+
+        QFuture<void> future = QtConcurrent::run([this, parentItem, dirPath]() {
+            constructScanTreeViewRecursively(parentItem, dirPath);
+        });
+
+        futureWatcher->setFuture(future);
+        auto *progressDialog = new QProgressDialog("Adding directory", "Cancel", 0, 100);
+        progressDialog->setMinimumDuration(2000);
+        QObject::connect(progressDialog, &QProgressDialog::canceled, [futureWatcher, progressDialog]() {
+            futureWatcher->future().cancel();
+            progressDialog->close();
+            progressDialog->deleteLater();
+            futureWatcher->deleteLater();
+        });
+
+        QObject::connect(futureWatcher, &QFutureWatcher<void>::finished, [futureWatcher, progressDialog]() {
+            if (futureWatcher->future().isCanceled()) { return; }
+            progressDialog->setValue(100);
+            progressDialog->setLabelText("Done.");
+            progressDialog->close();
+            progressDialog->deleteLater();
+            futureWatcher->deleteLater();
+        });
+
         return;
     }
 
     watcher->addPath(dirPath);
     // Create new tree item for the directory
-    constructScanTreeViewRecursively(myRootItem, dirPath);
+    QFuture<void> future = QtConcurrent::run([this, dirPath]() {
+        constructScanTreeViewRecursively(myRootItem, dirPath);
+    });
+    futureWatcher->setFuture(future);
+
+    auto *progressDialog = new QProgressDialog("Adding directory", "Cancel", 0, 0);
+    QObject::connect(progressDialog, &QProgressDialog::canceled, [futureWatcher, progressDialog]() {
+        if (futureWatcher->future().isFinished()) { return; }
+        futureWatcher->future().cancel();
+        progressDialog->close();
+        progressDialog->deleteLater();
+        futureWatcher->deleteLater();
+    });
+
+    QObject::connect(futureWatcher, &QFutureWatcher<void>::finished, [futureWatcher, progressDialog]() {
+        if (futureWatcher->future().isCanceled()) { return; }
+        progressDialog->setValue(100);
+        progressDialog->disconnect();
+        progressDialog->close();
+        progressDialog->deleteLater();
+        futureWatcher->deleteLater();
+    });
 
     // Uncheck all items in the tree
     for (const auto &item: pathsToScan) {
@@ -510,7 +559,22 @@ void MainWindow::on_scanButton_clicked() {
         }
 
     }
-
+    size_t originalFilePathsSize = filePaths.size();
+    if (filePaths.empty()) {
+        qDebug() << "No files to scan.";
+        // Show popup for no files to scan
+        auto *noFilesDialog = new QDialog(this);
+        noFilesDialog->setWindowTitle("No files to scan");
+        auto *layout = new QVBoxLayout();
+        noFilesDialog->setLayout(layout);
+        auto *label = new QLabel("No files to scan. Please add files or folders to scan.");
+        layout->addWidget(label);
+        auto *okButton = new QPushButton("Close");
+        layout->addWidget(okButton);
+        connect(okButton, &QPushButton::clicked, noFilesDialog, &QDialog::accept);
+        noFilesDialog->exec();
+        return;
+    }
     flaggedFilesTreeWidget->clear();
     // Scan the files in a separate thread,
     auto *futureWatcher = new QFutureWatcher<std::map<std::string, std::vector<MatchInfo>>>(this);
@@ -523,7 +587,9 @@ void MainWindow::on_scanButton_clicked() {
 
     auto *progressDialog = new QProgressDialog("Scanning in progress", "Cancel", 0, 100);
     progressDialog->setAutoReset(false);
+    progressDialog->setMinimumDuration(0);
     QObject::connect(progressDialog, &QProgressDialog::canceled, [futureWatcher, progressDialog]() {
+        if (futureWatcher->future().isFinished()) { return; }
         futureWatcher->future().cancel();
         progressDialog->close();
         progressDialog->deleteLater();
@@ -538,14 +604,23 @@ void MainWindow::on_scanButton_clicked() {
                      });
 
     QObject::connect(futureWatcher, &QFutureWatcher<std::map<std::string, std::vector<MatchInfo>>>::finished,
-                     [futureWatcher, this, &filePaths, progressDialog]() {
+                     [futureWatcher, this, originalFilePathsSize, progressDialog]() {
                          if (futureWatcher->future().isCanceled()) { return; }
                          progressDialog->setValue(100);
                          progressDialog->setLabelText("Constructing results...");
                          auto results = futureWatcher->result();  // Get the results when finished
                          processScanResults(results); // Process results here
-                         progressDialog->setLabelText("Done.");
-                         qDebug() << "Processed " << filePaths.size() << " files.";
+                         futureWatcher->deleteLater();
+                         // Disconnect the "cancel button" signal
+                         progressDialog->disconnect();
+                         progressDialog->setCancelButtonText("Close");
+                         QObject::connect(progressDialog, &QProgressDialog::canceled, [progressDialog]() {
+                             progressDialog->close();
+                             progressDialog->deleteLater();
+                         });
+                         qDebug() << "Processed " << originalFilePathsSize << " files.";
+                         progressDialog->setLabelText("Done. Processed " + QString::number(originalFilePathsSize) +
+                                                       " files.");
                      });
 }
 
@@ -558,20 +633,49 @@ void MainWindow::on_removeSelectedButton_2_clicked() {
         }
     }
 
-    // Remove checked items from the tree and the pathsToScan map
-    while (!checkedItems.isEmpty()) {
-        auto item = checkedItems.takeFirst();
-        removeItemFromTree(item);
-        auto parent = item->parent();
-        if (parent) {
-            delete item;
-            // if the parent item has no children, remove it from the tree
-            if (parent->childCount() == 0 && parent != myRootItem) {
-                removeItemFromTree(parent);
-                delete parent;
+    if (checkedItems.isEmpty()) {
+        qDebug() << "No items selected for removal.";
+        return;
+    }
+
+    auto *futureWatcher = new QFutureWatcher<void>(this);
+
+    QFuture<void> future = QtConcurrent::run([this, checkedItems]() mutable {
+        while (!checkedItems.isEmpty()) {
+            auto item = checkedItems.takeFirst();
+            removeItemFromTree(item);
+            auto parent = item->parent();
+            if (parent) {
+                delete item;
+                // if the parent item has no children, remove it from the tree
+                if (parent->childCount() == 0 && parent != myRootItem) {
+                    removeItemFromTree(parent);
+                    delete parent;
+                }
             }
         }
-    }
+    });
+    futureWatcher->setFuture(future);
+
+    auto *progressDialog = new QProgressDialog("Removing selected items", "Cancel", 0, 0);
+    progressDialog->setMinimumDuration(2000);
+
+    QObject::connect(progressDialog, &QProgressDialog::canceled, [futureWatcher, progressDialog]() {
+        if (futureWatcher->future().isFinished()) { return; }
+        futureWatcher->future().cancel();
+        progressDialog->close();
+        progressDialog->deleteLater();
+        futureWatcher->deleteLater();
+    });
+
+    QObject::connect(futureWatcher, &QFutureWatcher<void>::finished, [futureWatcher, progressDialog]() {
+        if (futureWatcher->future().isCanceled()) { return; }
+        progressDialog->close();
+        progressDialog->deleteLater();
+        futureWatcher->deleteLater();
+    });
+
+    progressDialog->exec();
 }
 
 

@@ -52,12 +52,13 @@ private:
     QFileSystemWatcher *watcher;
     FileScanner *fileScanner;
     bool allFlaggedSelected = false;
+    bool maxDepthReached = false;
     QString lastUpdatedPath = "";
     QMap<std::string, QTreeWidgetItem *> flaggedItems;
     Ui::MainWindow *ui;
 
     void setupUI();
-    void constructScanTreeViewRecursively(QTreeWidgetItem *parentItem, QString &path, int depth = 0, bool useShortName = false);
+    void constructScanTreeViewRecursively(QTreeWidgetItem *parentItem, const QString &path, int depth = 0, bool useShortName = false);
     void updateTreeItem(QTreeWidgetItem *item, const QString &path);
     QTreeWidgetItem* createTreeItem(QTreeWidgetItem *parentItem, const QString &path, bool useShortName);
     void removeItemFromTree(QTreeWidgetItem *item);

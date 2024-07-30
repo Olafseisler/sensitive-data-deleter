@@ -7,7 +7,6 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
-set(CMAKE_PREFIX_PATH "G:\\Qt\\6.7.1\\mingw_64")
 
 
 set(PROJECT "SensitiveDataDeleter")
@@ -19,9 +18,9 @@ find_package(Qt6 COMPONENTS
         REQUIRED)
 
 
-add_executable(${PROJECT} main.cpp ${QT_RESOURCES} mainwindow.cpp mainwindow.h mainwindow.ui configmanager.cpp configmanager.h
-        filescanner.cpp
-        filescanner.h)
+add_executable(${PROJECT} src/main.cpp ${QT_RESOURCES} src/mainwindow.cpp src/mainwindow.h src/mainwindow.ui src/configmanager.cpp src/configmanager.h
+        src/filescanner.cpp
+        src/filescanner.h)
 target_link_libraries(${PROJECT}
         Qt::Core
         Qt::Gui
