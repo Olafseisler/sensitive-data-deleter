@@ -11,6 +11,7 @@
 #include <QFileSystemWatcher>
 #include <QMap>
 #include <QDebug>
+#include <QProgressDialog>
 
 #include "ui_mainwindow.h"
 #include "configmanager.h"
@@ -62,13 +63,13 @@ private:
     void updateTreeItem(QTreeWidgetItem *item, const QString &path);
     QTreeWidgetItem* createTreeItem(QTreeWidgetItem *parentItem, const QString &path, bool useShortName);
     void removeItemFromTree(QTreeWidgetItem *item);
-    void onItemChanged(QTreeWidgetItem *item, int column);
     QString getParentPath(const QString &dirPath);
     QTreeWidgetItem* findItemForPath(QTreeWidget* treeWidget, const QString& path);
     QTreeWidgetItem* findItemForPath(QTreeWidgetItem* parentItem, const QString& path);
     QDialog* createConfirmationDialog(const QString &title, const QString &labelText, const QString &buttonText);
-    void processScanResults(std::map<std::string, std::vector<MatchInfo>> &matches);
+    void processScanResults(std::map<std::string, std::pair<ScanResult, std::vector<MatchInfo>>> &matches, QProgressDialog *progressDialog);
+    void setRowBackgroundColor(QTreeWidgetItem* item, const QColor& color, int columnCount);
+    void handleFlaggedScanItem(const std::pair<std::string, std::pair<ScanResult, std::vector<MatchInfo>>> &match, uint8_t &scanResultBits);
 };
-
 
 #endif //SENSITIVE_DATA_DELETER_MAINWINDOW_H

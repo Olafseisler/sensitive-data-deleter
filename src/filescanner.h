@@ -13,6 +13,16 @@
 #include <QPromise>
 #include <filesystem>
 
+enum ScanResult {
+    CLEAN,
+    FLAGGED,
+    UNSUPPORTED_TYPE,
+    READ_PERMS_FAIL,
+    WRITE_PERMS_FAIL,
+    DIRECTORY_TOO_DEEP,
+    UNDEFINED
+};
+
 struct MatchInfo {
     std::pair<std::string, std::string> patternUsed;
     std::string match;
@@ -23,14 +33,15 @@ struct MatchInfo {
 class FileScanner {
 public:
     FileScanner();
+
     ~FileScanner();
 
-    static void scanFiles(QPromise<std::map<std::string, std::vector<MatchInfo>>> &promise,
-                  const std::vector<std::string>& filePaths,
-                  const std::map<std::string, std::string>& patterns,
-                  const std::map<std::string, std::string>& fileTypes);
+    static void scanFiles(QPromise<std::map<std::string, std::pair<ScanResult, std::vector<MatchInfo>>>> &promise,
+                          const std::vector<std::string> &filePaths,
+                          const std::map<std::string, std::string> &patterns,
+                          const std::map<std::string, std::string> &fileTypes);
 
-    static std::vector<MatchInfo>
+    static std::pair<ScanResult, std::vector<MatchInfo>>
     scanFileForSensitiveData(const std::filesystem::path &filePath, const std::map<std::string, std::string> &patterns);
 
     void deleteFiles(std::vector<std::string> &filePaths);

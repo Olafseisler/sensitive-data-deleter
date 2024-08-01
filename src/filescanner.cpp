@@ -24,13 +24,13 @@ FileScanner::~FileScanner() {
 }
 
 void
-FileScanner::scanFiles(QPromise<std::map<std::string, std::vector<MatchInfo>>> &promise,
+FileScanner::scanFiles(QPromise<std::map<std::string, std::pair<ScanResult, std::vector<MatchInfo>>>> &promise,
                             const std::vector<std::string>& filePaths,
                             const std::map<std::string, std::string>& patterns,
                             const std::map<std::string, std::string>& fileTypes) {
     // Scan files based on given patterns and file types
     int i = 0;
-    std::map<std::string, std::vector<MatchInfo>> matches;
+    std::map<std::string, std::pair<ScanResult, std::vector<MatchInfo>>> matches;
 
     for (const auto &filePath: filePaths) {
         // If the file type is not in the list of file types, skip the file
@@ -44,12 +44,13 @@ FileScanner::scanFiles(QPromise<std::map<std::string, std::vector<MatchInfo>>> &
         // If the file is not a text file based on MIME type, skip the file
         QString mimeType = QMimeDatabase().mimeTypeForFile(QString::fromStdString(filePath)).name();
         if (!mimeType.contains("text")) {
+            matches[filePath] = std::make_pair(ScanResult::UNSUPPORTED_TYPE, std::vector<MatchInfo>());
             continue;
         }
 
-        std::vector<MatchInfo> fileMatches = scanFileForSensitiveData(filePath, patterns);
-        if (!fileMatches.empty())
-            matches[filePath] = fileMatches;
+        std::pair<ScanResult, std::vector<MatchInfo>> fileMatches = scanFileForSensitiveData(filePath, patterns);
+        matches[filePath] = fileMatches;
+
         ++i;
     }
     promise.addResult(matches);
@@ -57,16 +58,22 @@ FileScanner::scanFiles(QPromise<std::map<std::string, std::vector<MatchInfo>>> &
     promise.finish();
 }
 
-std::vector<MatchInfo>
+std::pair<ScanResult, std::vector<MatchInfo>>
 FileScanner::scanFileForSensitiveData(const std::filesystem::path &filePath, const std::map<std::string, std::string> &patterns) {
     std::ifstream file(filePath, std::ios::binary);
     if (!file.is_open()) {
-        throw std::runtime_error("Could not open file for scanning.");
+        return std::make_pair(ScanResult::READ_PERMS_FAIL, std::vector<MatchInfo>());
     }
 
-    std::vector<MatchInfo> matches;
-    char buffer[CHUNK_SIZE];
+    // Check for write permissions
+    auto returnPair = std::make_pair(ScanResult::CLEAN, std::vector<MatchInfo>());
+    std::ofstream testWrite(filePath, std::ios::app);
+    if (!testWrite.is_open()) {
+        returnPair.first = ScanResult::WRITE_PERMS_FAIL;
+        testWrite.close();
+    }
 
+    char buffer[CHUNK_SIZE];
     while (file) {
         // Read file in chunks
         file.read(buffer, CHUNK_SIZE);
@@ -76,23 +83,23 @@ FileScanner::scanFileForSensitiveData(const std::filesystem::path &filePath, con
         }
 
         std::string chunk(buffer, bytesRead);
-
         for (const auto &pattern: patterns) {
             std::regex regex(pattern.first);
             std::smatch match;
             auto searchStart = chunk.cbegin();
             while (std::regex_search(searchStart, chunk.cend(), match, regex)) {
                 // Sensitive data found
+                returnPair.first = ScanResult::FLAGGED;
                 MatchInfo matchInfo;
                 matchInfo.patternUsed = std::make_pair(pattern.first, pattern.second);
                 matchInfo.match = match.str();
                 matchInfo.startIndex = match.position() + std::distance(chunk.cbegin(), searchStart);
                 matchInfo.endIndex = matchInfo.startIndex + match.length();
-                matches.push_back(matchInfo);
+                returnPair.second.push_back(matchInfo);
 
-                if (matches.size() > MAX_NUM_MATCHES) {
+                if (returnPair.second.size() > MAX_NUM_MATCHES) {
                     file.close();
-                    return matches;
+                    return returnPair;
                 }
 
                 searchStart = match.suffix().first;
@@ -101,7 +108,7 @@ FileScanner::scanFileForSensitiveData(const std::filesystem::path &filePath, con
     }
 
     file.close();
-    return matches;
+    return returnPair;
 }
 
 /**
