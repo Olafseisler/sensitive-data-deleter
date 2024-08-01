@@ -297,7 +297,7 @@ void MainWindow::on_addFolderButton_clicked() {
         auto *parentItem = pathsToScan.value(parentPath);
 
         QFuture<void> future = QtConcurrent::run([this, parentItem, dirPath]() {
-            constructScanTreeViewRecursively(parentItem, dirPath);
+            constructScanTreeViewRecursively(parentItem, dirPath, 0, true);
         });
 
         futureWatcher->setFuture(future);
@@ -404,12 +404,6 @@ void MainWindow::on_addFileButton_clicked() {
 
         if (pathsToScan.contains(itemPath)) {
             qDebug() << "File " << itemPath << " already being watched";
-            continue;
-        }
-
-        // Handle the case when a file cannot be read due to permissions
-        if (!QFileInfo(fileName).isReadable()) {
-            qWarning() << "File " << fileName << " is not readable";
             continue;
         }
 
@@ -521,7 +515,7 @@ MainWindow::handleFlaggedScanItem(const std::pair<std::string, std::pair<ScanRes
             scanResultBits = scanResultBits | 0x5;
             break;
         case ScanResult::WRITE_PERMS_FAIL:
-            setRowBackgroundColor(scanTreeItem, QColor(255, 165, 0, 50), columnCount);
+            setRowBackgroundColor(scanTreeItem, QColor(255, 120, 0, 50), columnCount);
             scanTreeItem->setToolTip(0, "Can not write to or delete file due to permissions. This may cause issues.");
             scanResultBits = scanResultBits | 0x6;
             break;
