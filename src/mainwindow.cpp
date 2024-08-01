@@ -6,6 +6,7 @@
 #include <QFutureWatcher>
 #include <QtConcurrent/QtConcurrentRun>
 #include <QProgressDialog>
+#include <QFileIconProvider>
 
 #define MAX_DEPTH 10
 
@@ -380,6 +381,10 @@ QTreeWidgetItem *MainWindow::createTreeItem(QTreeWidgetItem *parentItem, const Q
     if (!QFileInfo(path).isDir()) {
         item->setText(1, formatFileSize(QFileInfo(path).size()));
         item->setText(2, QFileInfo(path).lastModified().toString("dd/MM/yyyy"));
+        QFileInfo fileInfo(path);
+        item->setIcon(0, iconProvider.icon(fileInfo));
+    } else {
+        item->setIcon(0, iconProvider.icon(QFileIconProvider::Folder));
     }
     item->setCheckState(0, Qt::Unchecked);
     pathsToScan.insert(path, item);
@@ -492,26 +497,32 @@ MainWindow::handleFlaggedScanItem(const std::pair<std::string, std::pair<ScanRes
     switch (match.second.first) {
         case ScanResult::CLEAN:
             setRowBackgroundColor(scanTreeItem, QColor(0, 255, 0, 50), columnCount);
+            scanTreeItem->setToolTip(0, "No sensitive data found");
             scanResultBits = scanResultBits | 0x1;
             break;
         case ScanResult::DIRECTORY_TOO_DEEP:
             setRowBackgroundColor(scanTreeItem, QColor(128, 128, 128, 50), columnCount);
+            scanTreeItem->setToolTip(0, "Directory is too deep to scan");
             scanResultBits = scanResultBits | 0x2;
             break;
         case ScanResult::FLAGGED:
             setRowBackgroundColor(scanTreeItem, QColor(255, 255, 0, 50), columnCount);
+            scanTreeItem->setToolTip(0, "Sensitive data found");
             scanResultBits = scanResultBits | 0x3;
             break;
         case ScanResult::UNSUPPORTED_TYPE:
             setRowBackgroundColor(scanTreeItem, QColor(150, 150, 150, 50), columnCount);
+            scanTreeItem->setToolTip(0, "Unsupported file type");
             scanResultBits = scanResultBits | 0x4;
             break;
         case ScanResult::READ_PERMS_FAIL:
             setRowBackgroundColor(scanTreeItem, QColor(255, 0, 0, 50), columnCount);
+            scanTreeItem->setToolTip(0, "Could not read file due to permissions");
             scanResultBits = scanResultBits | 0x5;
             break;
         case ScanResult::WRITE_PERMS_FAIL:
             setRowBackgroundColor(scanTreeItem, QColor(255, 165, 0, 50), columnCount);
+            scanTreeItem->setToolTip(0, "Can not write to or delete file due to permissions. This may cause issues.");
             scanResultBits = scanResultBits | 0x6;
             break;
         default:

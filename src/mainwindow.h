@@ -12,6 +12,7 @@
 #include <QMap>
 #include <QDebug>
 #include <QProgressDialog>
+#include <QFileIconProvider>
 
 #include "ui_mainwindow.h"
 #include "configmanager.h"
@@ -56,6 +57,7 @@ private:
     bool maxDepthReached = false;
     QString lastUpdatedPath = "";
     QMap<std::string, QTreeWidgetItem *> flaggedItems;
+    QFileIconProvider iconProvider = QFileIconProvider();
     Ui::MainWindow *ui;
 
     void setupUI();
