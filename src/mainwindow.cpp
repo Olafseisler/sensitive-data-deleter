@@ -39,6 +39,7 @@ void MainWindow::setupUI() {
     flaggedFilesTreeWidget->setSelectionBehavior(QAbstractItemView::SelectRows);
     flaggedFilesTreeWidget->setSelectionMode(QAbstractItemView::MultiSelection);
 
+    fileTypesTableWidget->setColumnCount(4);
     scanPatternsTableWidget->setColumnCount(4);
 
     auto currentDate = QDate::currentDate();
@@ -51,16 +52,76 @@ void MainWindow::setupUI() {
     fileTreeWidget->setHeaderLabel("Files and Folders");
 
     // Load the config
-    QMap<QString, QString> fileTypes = configManager->getFileTypes();
-            foreach (const auto &fileType, fileTypes.keys()) {
-            fileTypesTableWidget->insertRow(fileTypesTableWidget->rowCount());
-            auto *checkBox = new QTableWidgetItem();
-            checkBox->setCheckState(Qt::Checked);
-            fileTypesTableWidget->setItem(fileTypesTableWidget->rowCount() - 1, 0, checkBox);
-            fileTypesTableWidget->setItem(fileTypesTableWidget->rowCount() - 1, 1, new QTableWidgetItem(fileType));
-            fileTypesTableWidget->setItem(fileTypesTableWidget->rowCount() - 1, 2,
-                                          new QTableWidgetItem(fileTypes[fileType]));
+    QList<QPair<QString, QString>> fileTypes = configManager->getFileTypes();
+            foreach (const auto &fileType, fileTypes) {
+            int row = fileTypesTableWidget->rowCount();
+            fileTypesTableWidget->insertRow(row);
+            fileTypesTableWidget->setItem(row, 0, new QTableWidgetItem());
+            fileTypesTableWidget->setItem(row, 1, new QTableWidgetItem(fileType.first));
+            fileTypesTableWidget->setItem(row, 2, new QTableWidgetItem(fileType.second));
+
+            // Add a button to the column to the right to remove the row
+            auto *removeButton = new QPushButton("Remove");
+            fileTypesTableWidget->setCellWidget(row, 3, removeButton);
+
+            // Connect the button to the slot to remove the row
+            connect(removeButton, &QPushButton::clicked, this, [this, row]() {
+                auto *confirmationDialog = createConfirmationDialog("Remove File Type",
+                                                                    "Are you sure you want to remove the file type for " +
+                                                                    this->fileTypesTableWidget->item(row, 2)->text() +
+                                                                    "?",
+                                                                    "Remove");
+                if (confirmationDialog->result() == QDialog::Rejected) {
+                    return;
+                }
+
+                auto fileTypeToRemove = this->fileTypesTableWidget->item(row, 1)->text();
+                this->fileTypesTableWidget->removeRow(row);
+                this->configManager->removeFileType(fileTypeToRemove);
+            });
         }
+
+
+    // Connect the itemChanged slot for file types
+    connect(fileTypesTableWidget, &QTableWidget::itemChanged, [this](QTableWidgetItem *item) {
+        auto *column1 = fileTypesTableWidget->item(item->row(), 1);
+        auto *column2 = fileTypesTableWidget->item(item->row(), 2);
+
+        if (column1 == nullptr || column1->text().isEmpty()) {
+            // Set the background to red if the file type is empty
+            if (fileTypesTableWidget->item(item->row(), 1)) {
+                fileTypesTableWidget->item(item->row(), 1)->setToolTip("File type can not be empty");
+                fileTypesTableWidget->item(item->row(), 1)->setBackground(QBrush(QColor(255, 0, 0, 50)));
+            }
+            return;
+        } else {
+            // Set the background to white if the file type is not empty
+            if (fileTypesTableWidget->item(item->row(), 1)){
+                fileTypesTableWidget->item(item->row(), 1)->setBackground(QBrush(QColor(0, 0, 0, 0)));
+                fileTypesTableWidget->item(item->row(), 1)->setToolTip("");
+            }
+        }
+
+        if (column2 == nullptr || column2->text().isEmpty()) {
+            if (fileTypesTableWidget->item(item->row(), 2)) {
+                fileTypesTableWidget->item(item->row(), 2)->setToolTip("Description can not be empty");
+                fileTypesTableWidget->item(item->row(), 2)->setBackground(QBrush(QColor(255, 0, 0, 50)));
+            }
+            return;
+        } else {
+            // Set the background to transparent if the description is not empty
+            if (fileTypesTableWidget->item(item->row(), 2)){
+                fileTypesTableWidget->item(item->row(), 2)->setBackground(QBrush(QColor(0, 0, 0, 0)));
+                fileTypesTableWidget->item(item->row(), 2)->setToolTip("");
+            }
+        }
+
+        // TODO:Check if the file type already exists in the file and inform the user
+
+        QString newFileType = column1->text();
+        QString newDescription = column2->text();
+        configManager->editFileType(item->row(), newFileType, newDescription);
+    });
 
     // Set column widths. The first column should be as small as possible, the second column should be 30% of the table width
     fileTypesTableWidget->horizontalHeader()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
@@ -94,8 +155,8 @@ void MainWindow::setupUI() {
                     return;
                 }
 
-                this->scanPatternsTableWidget->removeRow(row);
                 auto patternToRemove = this->scanPatternsTableWidget->item(row, 1)->text();
+                this->scanPatternsTableWidget->removeRow(row);
                 this->configManager->removeScanPattern(patternToRemove);
             });
         }
@@ -104,23 +165,48 @@ void MainWindow::setupUI() {
     scanPatternsTableWidget->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
     scanPatternsTableWidget->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Stretch);
 
-    // Set the file types table to not be editable
-    fileTypesTableWidget->setEditTriggers(QAbstractItemView::NoEditTriggers);
     connect(watcher, &QFileSystemWatcher::directoryChanged, this, &MainWindow::onDirectoryChanged);
+
     // Update the config file if any item in fileTypesTableWidget is edited
     connect(scanPatternsTableWidget, &QTableWidget::itemChanged, [this](QTableWidgetItem *item) {
-        qDebug() << item->text();
-        qDebug() << item->row();
         auto *column1 = scanPatternsTableWidget->item(item->row(), 1);
         auto *column2 = scanPatternsTableWidget->item(item->row(), 2);
 
-        if (column1 == nullptr || column2 == nullptr || column1->text().isEmpty() || column2->text().isEmpty()) {
+        if (column1 == nullptr || column1->text().isEmpty()) {
+            if (scanPatternsTableWidget->item(item->row(), 1)) {
+                scanPatternsTableWidget->item(item->row(), 1)->setToolTip("File type can not be empty");
+                scanPatternsTableWidget->item(item->row(), 1)->setBackground(QBrush(QColor(255, 0, 0, 50)));
+            }
             return;
+        } else {
+            if (scanPatternsTableWidget->item(item->row(), 1)){
+                scanPatternsTableWidget->item(item->row(), 1)->setBackground(QBrush(QColor(0, 0, 0, 0)));
+                scanPatternsTableWidget->item(item->row(), 1)->setToolTip("");
+            }
+        }
+
+        if (column2 == nullptr || column2->text().isEmpty()) {
+            if (scanPatternsTableWidget->item(item->row(), 2)) {
+                scanPatternsTableWidget->item(item->row(), 2)->setToolTip("Description can not be empty");
+                scanPatternsTableWidget->item(item->row(), 2)->setBackground(QBrush(QColor(255, 0, 0, 50)));
+            }
+            return;
+        } else {
+            // Set the background to transparent if the description is not empty
+            if (scanPatternsTableWidget->item(item->row(), 2)){
+                scanPatternsTableWidget->item(item->row(), 2)->setBackground(QBrush(QColor(0, 0, 0, 0)));
+                scanPatternsTableWidget->item(item->row(), 2)->setToolTip("");
+            }
         }
 
         if (!configManager->isValidRegex(column1->text())) {
             qDebug() << "The scan pattern is not a valid regex expression.";
+            scanPatternsTableWidget->item(item->row(), 1)->setBackground(QBrush(QColor(255, 0, 0, 50)));
+            scanPatternsTableWidget->item(item->row(), 1)->setToolTip("The scan pattern is not a valid regex expression.");
             return;
+        } else {
+            scanPatternsTableWidget->item(item->row(), 1)->setBackground(QBrush(QColor(0, 0, 0, 0)));
+            scanPatternsTableWidget->item(item->row(), 1)->setToolTip("");
         }
 
         // Check if the scan pattern already exists
@@ -467,6 +553,21 @@ MainWindow::createConfirmationDialog(const QString &title, const QString &labelT
     return dialog;
 }
 
+QDialog *MainWindow::createInfoDialog(const QString &title, const QString &labelText) {
+    auto *dialog = new QDialog(this);
+    dialog->setWindowTitle(title);
+    auto *layout = new QVBoxLayout();
+    dialog->setLayout(layout);
+    auto *label = new QLabel(labelText);
+    layout->addWidget(label);
+    auto *closeButton = new QPushButton("Close");
+    layout->addWidget(closeButton);
+    connect(closeButton, &QPushButton::clicked, dialog, &QDialog::accept);
+    dialog->exec();
+
+    return dialog;
+}
+
 void expandToFlaggedItem(QTreeWidgetItem *item) {
     QTreeWidgetItem *parent = item->parent();
     while (parent) {
@@ -482,7 +583,8 @@ void expandToFlaggedItem(QTreeWidgetItem *item) {
 }
 
 void
-MainWindow::handleFlaggedScanItem(const std::pair<std::string, std::pair<ScanResult, std::vector<MatchInfo>>> &match, uint8_t &scanResultBits) {
+MainWindow::handleFlaggedScanItem(const std::pair<std::string, std::pair<ScanResult, std::vector<MatchInfo>>> &match,
+                                  uint8_t &scanResultBits) {
     int columnCount = fileTreeWidget->columnCount();
     auto qstringPath = QString::fromStdString(match.first);
     // Set the color of the row of the corresponding element in fileTreeWidget
@@ -550,7 +652,8 @@ QString getWarningMessage(uint8_t scanResultBits) {
     return warningMessage;
 }
 
-void MainWindow::processScanResults(std::map<std::string, std::pair<ScanResult, std::vector<MatchInfo>>> &matches, QProgressDialog *progressDialog) {
+void MainWindow::processScanResults(std::map<std::string, std::pair<ScanResult, std::vector<MatchInfo>>> &matches,
+                                    QProgressDialog *progressDialog) {
     uint8_t scanResultBits = 0;
     for (const auto &match: matches) {
         handleFlaggedScanItem(match, scanResultBits);
@@ -880,8 +983,8 @@ void MainWindow::on_addPatternButton_clicked() {
             return;
         }
 
-        this->scanPatternsTableWidget->removeRow(row);
         auto patternToRemove = this->scanPatternsTableWidget->item(row, 1)->text();
+        this->scanPatternsTableWidget->removeRow(row);
         this->configManager->removeScanPattern(patternToRemove);
     });
 
@@ -893,5 +996,51 @@ void MainWindow::on_addPatternButton_clicked() {
              << scanPatternsTableWidget->item(row, 0)->checkState();
 }
 
+void MainWindow::on_addFiletypeButton_clicked() {
+    // Add a new row to the file types table
+    int row = fileTypesTableWidget->rowCount();
+    fileTypesTableWidget->insertRow(row);
 
+    // Initialize the new checkbox item with check state
+    auto *newCheckBox = new QTableWidgetItem("");
+    newCheckBox->setFlags(newCheckBox->flags() | Qt::ItemIsUserCheckable); // Ensure the item is checkable
+    newCheckBox->setCheckState(Qt::Unchecked); // Initialize with unchecked state
+
+    // Debug output to verify item initialization
+    qDebug() << "Inserting new item at row:" << row << "with initial check state:" << newCheckBox->checkState();
+
+    // Set the new checkbox item in the first column
+    fileTypesTableWidget->setItem(row, 0, newCheckBox);
+
+    // Add other items to the new row
+    fileTypesTableWidget->setItem(row, 1, new QTableWidgetItem(""));
+    fileTypesTableWidget->setItem(row, 2, new QTableWidgetItem(""));
+
+    // Set the new row to be checked by default
+    fileTypesTableWidget->item(row, 0)->setCheckState(Qt::Checked);
+    // Add a remove button to the new row
+    auto *removeButton = new QPushButton("Remove");
+    fileTypesTableWidget->setCellWidget(row, 3, removeButton);
+
+    // Connect the button to the slot to remove the row
+    connect(removeButton, &QPushButton::clicked, this, [this, row]() {
+        auto *confirmationDialog = createConfirmationDialog("Remove File Type",
+                                                            "Are you sure you want to remove this file type?",
+                                                            "Remove");
+        if (confirmationDialog->result() == QDialog::Rejected) {
+            return;
+        }
+
+        auto fileTypeToRemove = this->fileTypesTableWidget->item(row, 1)->text();
+        this->fileTypesTableWidget->removeRow(row);
+        this->configManager->removeFileType(fileTypeToRemove);
+    });
+
+    // Start typing in the new row
+    fileTypesTableWidget->editItem(fileTypesTableWidget->item(row, 1));
+
+    // Debug output to verify item state after modification
+    qDebug() << "New item at row:" << row << "with final check state:"
+             << fileTypesTableWidget->item(row, 0)->checkState();
+}
 

@@ -15,21 +15,22 @@ public:
     ConfigManager();
     ~ConfigManager();
     void loadConfigFromFile(QString &path);
-    void addNewFileType(QString &fileType, QString &description);
+    void editFileType(int index, QString &fileType, QString &description);
     void removeFileType(QString &fileType);
     void addNewScanPattern(QString &scanPattern, QString &description);
     void removeScanPattern(QString &scanPattern);
     void editScanPattern(int index, QString &scanPattern, QString &description);
     bool isValidRegex(QString pattern);
-    QMap<QString, QString> getFileTypes();
+    QList<QPair<QString, QString>> getConfigList();
+    QList<QPair<QString, QString>> getFileTypes();
     QList<QPair<QString, QString>> getScanPatterns();
     void updateConfigFile();
 
 private:
     QString configFilePath;
-    QMap<QString, QString> fileTypes;
+    QList<QPair<QString, QString>> fileTypes;
     QList<QPair<QString, QString>> scanPatterns;
-
+    QList<QString> immutableTypes = {".txt"};
 };
 
 

@@ -9,14 +9,23 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonArray>
+#include <QDialog>
 #include <regex>
 
 #include "configmanager.h"
+
+void showProblemDialog(const QString &title, const QString &message) {
+    QDialog dialog;
+    dialog.setWindowTitle(title);
+    dialog.exec();
+}
 
 ConfigManager::ConfigManager() {
     // Read configpath.txt to determine the config location
     QFile file("configpath.txt");
     if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        showProblemDialog("Error: Could not open configpath.txt.", "Cannot find or read scan config path file."
+                                                                   " Please make sure it exists in the executable directory.");
         throw std::runtime_error("Could not open configpath.txt. Cannot find scan config path file.");
     }
 
@@ -25,20 +34,30 @@ ConfigManager::ConfigManager() {
     file.close();
 
     if (candidatePath.isEmpty()) {
+        showProblemDialog("Error: configpath.txt is empty.",
+                          "Please specify a valid configuration file path in configpath.txt.");
         throw std::runtime_error("configpath.txt is empty");
     }
 
     QList<QString> parts = candidatePath.split("=");
     if (parts.size() != 2) {
+        showProblemDialog("Error: configpath.txt is not formatted correctly.",
+                          "Please format the file as 'CONFIG_FILE_PATH=<path>'");
         throw std::runtime_error("configpath.txt is not formatted correctly");
     }
     if (parts[0] != "CONFIG_FILE_PATH") {
+        showProblemDialog("Error: configpath.txt is not formatted correctly.",
+                          "Please format the file as 'CONFIG_FILE_PATH=<path>'");
         throw std::runtime_error("configpath.txt is not formatted correctly");
     }
     if (parts[1].isEmpty()) {
+        showProblemDialog("Error: configpath.txt is empty.",
+                          "Please specify a valid configuration file path in configpath.txt.");
         throw std::runtime_error("The config file path is empty. Please specify a path in configpath.txt.");
     }
     if (!parts[1].endsWith(".json")) {
+        showProblemDialog("Error: The config file must be a .json file.",
+                          "Please specify a valid configuration file path in configpath.txt.");
         throw std::runtime_error("The config file must be a .json file.");
     }
 
@@ -54,58 +73,103 @@ void ConfigManager::loadConfigFromFile(QString &path) {
     // Open the .json config and read it into memory
     QFile file(path);
     if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        showProblemDialog("Error: Could not open config file for reading.",
+                          "Cannot open the scan config file for reading.");
         throw std::runtime_error("Could not open config file for reading.");
     }
 
     QJsonDocument jsonDocument = QJsonDocument::fromJson(file.readAll());
     if (jsonDocument.isNull()) {
+        showProblemDialog("Error: The config file is not a valid .json file.",
+                          "The scan config file is not a properly formatted JSON.");
         throw std::runtime_error("The config file is not a valid .json file.");
     }
 
     // Parse the .json file
     QJsonObject rootObj = jsonDocument.object();
-    QJsonValue fileTypes = rootObj["fileTypes"];
-    QJsonValue scanPatterns = rootObj["scanPatterns"];
+    QJsonValue newFileTypes = rootObj["fileTypes"];
+    QJsonValue newScanPatterns = rootObj["scanPatterns"];
 
-    if (!fileTypes.isArray() || !scanPatterns.isArray()) {
+    if (newFileTypes.isNull() || newScanPatterns.isNull() || !newFileTypes.isArray() || !newScanPatterns.isArray()) {
+        showProblemDialog("Error: The config file is not formatted correctly.",
+                          "The scan config file is not in expected format.");
         throw std::runtime_error("The config file is not formatted correctly.");
     }
 
-    QJsonArray fileTypesArray = fileTypes.toArray();
-    for (auto && i : fileTypesArray) {
+    QJsonArray fileTypesArray = newFileTypes.toArray();
+    bool fileTypesError = false;
+    bool scanPatternsError = false;
+    bool regexError = false;
+
+    for (auto &&i: fileTypesArray) {
         QJsonValue value = i;
         if (value.isObject()) {
             QJsonObject obj = value.toObject();
             QString fileType = obj["fileType"].toString();
             QString description = obj["description"].toString();
-            this->fileTypes.insert(fileType, description);
+            if (fileType.isNull() || description.isNull() || fileType.isEmpty() || description.isEmpty()) {
+                qDebug() << "The file type or description is null or empty.";
+                fileTypesError = true;
+                continue;
+            }
+            this->fileTypes.append(qMakePair(fileType, description));
         }
     }
 
-    QJsonArray scanPatternsArray = scanPatterns.toArray();
-    for (auto && i : scanPatternsArray) {
+    QJsonArray scanPatternsArray = newScanPatterns.toArray();
+    for (auto &&i: scanPatternsArray) {
         QJsonValue value = i;
         if (value.isObject()) {
             QJsonObject obj = value.toObject();
             QString scanPattern = obj["pattern"].toString();
             QString description = obj["description"].toString();
+            if (scanPattern.isNull() || description.isNull() ||
+                scanPattern.isEmpty() || description.isEmpty()) {
+                qDebug() << "The scan pattern or description is null or empty.";
+                scanPatternsError = true;
+                continue;
+            }
 
             if (!isValidRegex(scanPattern)) {
-               qDebug() << "The scan pattern is not a valid regex expression.";
-               continue;
+                qDebug() << "The scan pattern is not a valid regex expression.";
+                regexError = true;
+                continue;
             }
             this->scanPatterns.append(qMakePair(scanPattern, description));
         }
     }
+
+    QString errorMessage = "";
+    if (fileTypesError) {
+        errorMessage += "Some file types could not be loaded.\n";
+    }
+    if (scanPatternsError) {
+        errorMessage += "Some scan patterns could not be loaded.\n";
+    }
+    if (regexError) {
+        errorMessage += "Some scan patterns are not valid regex expressions.\n";
+    }
+    if (!errorMessage.isEmpty()) {
+        showProblemDialog("Error: Could not load all file types and scan patterns.", errorMessage);
+    }
 }
 
-void ConfigManager::addNewFileType(QString &fileType, QString &description) {
-    fileTypes.insert(fileType, fileType);
+void ConfigManager::editFileType(int index, QString &fileType, QString &description) {
+    if (index == fileTypes.size()) {
+        fileTypes.append(qMakePair(fileType, description));
+    } else {
+        fileTypes[index] = qMakePair(fileType, description);
+    }
     updateConfigFile();
 }
 
 void ConfigManager::removeFileType(QString &fileType) {
-    fileTypes.remove(fileType);
+    for (size_t i = 0; i < fileTypes.size(); i++) {
+        if (fileTypes[i].first == fileType) {
+            fileTypes.removeAt(i);
+            break;
+        }
+    }
     updateConfigFile();
 }
 
@@ -130,26 +194,25 @@ void ConfigManager::updateConfigFile() {
     QJsonArray fileTypesArray;
     QJsonArray scanPatternsArray;
 
-    for (const auto & fileType : fileTypes.keys()) {
+    for (const auto &fileType : fileTypes) {
         QJsonObject fileTypeObj;
-        fileTypeObj["fileType"] = fileType;
-        fileTypeObj["description"] = fileTypes[fileType];
+        fileTypeObj["fileType"] = fileType.first;
+        fileTypeObj["description"] = fileType.second;
         fileTypesArray.append(fileTypeObj);
     }
-    for (const auto & scanPattern : scanPatterns) {
+    for (const auto &scanPattern : scanPatterns) {
         QJsonObject scanPatternObj;
         scanPatternObj["pattern"] = scanPattern.first;
         scanPatternObj["description"] = scanPattern.second;
         scanPatternsArray.append(scanPatternObj);
     }
 
-
     obj["fileTypes"] = fileTypesArray;
     obj["scanPatterns"] = scanPatternsArray;
 
     QJsonDocument doc(obj);
     QFile file(configFilePath);
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Truncate)) {
         throw std::runtime_error("Could not open config file for writing.");
     }
 
@@ -157,7 +220,13 @@ void ConfigManager::updateConfigFile() {
     out << doc.toJson();
 
     file.close();
-    loadConfigFromFile(configFilePath);
+}
+
+QList<QPair<QString, QString>> ConfigManager::getConfigList() {
+    QList<QPair<QString, QString>> configList;
+    configList.append(fileTypes);
+    configList.append(scanPatterns);
+    return configList;
 }
 
 void ConfigManager::editScanPattern(int index, QString &scanPattern, QString &description) {
@@ -171,9 +240,10 @@ void ConfigManager::editScanPattern(int index, QString &scanPattern, QString &de
     } else {
         scanPatterns[index] = qMakePair(scanPattern, description);
     }
+    updateConfigFile();
 }
 
-QMap<QString, QString> ConfigManager::getFileTypes() {
+QList<QPair<QString, QString>> ConfigManager::getFileTypes() {
     return fileTypes;
 }
 
