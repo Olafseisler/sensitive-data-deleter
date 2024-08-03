@@ -56,7 +56,10 @@ void MainWindow::setupUI() {
             foreach (const auto &fileType, fileTypes) {
             int row = fileTypesTableWidget->rowCount();
             fileTypesTableWidget->insertRow(row);
-            fileTypesTableWidget->setItem(row, 0, new QTableWidgetItem());
+
+            auto *checkBox = new QTableWidgetItem();
+            checkBox->setCheckState(Qt::Checked);
+            fileTypesTableWidget->setItem(row, 0, checkBox);
             fileTypesTableWidget->setItem(row, 1, new QTableWidgetItem(fileType.first));
             fileTypesTableWidget->setItem(row, 2, new QTableWidgetItem(fileType.second));
 
@@ -735,6 +738,13 @@ void MainWindow::on_scanButton_clicked() {
             checkedScanPatterns[scanPatternsTableWidget->item(i, 1)->text().toStdString()] =
                     scanPatternsTableWidget->item(i, 2)->text().toStdString();
         }
+    }
+
+    // If there are no file types or scan patterns selected, show a popup and return
+    if (checkedFileTypes.empty() || checkedScanPatterns.empty()) {
+        auto *noSelectionDialog = createInfoDialog("No file types or scan patterns selected",
+                                                "Please select at least one file type and one scan pattern to scan.");
+        return;
     }
 
     // Get all files in pathsToScan

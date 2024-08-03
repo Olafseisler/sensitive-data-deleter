@@ -15,6 +15,7 @@
 #include "configmanager.h"
 
 void showProblemDialog(const QString &title, const QString &message) {
+    qWarning() << message;
     QDialog dialog;
     dialog.setWindowTitle(title);
     dialog.exec();
@@ -26,7 +27,7 @@ ConfigManager::ConfigManager() {
     if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
         showProblemDialog("Error: Could not open configpath.txt.", "Cannot find or read scan config path file."
                                                                    " Please make sure it exists in the executable directory.");
-        throw std::runtime_error("Could not open configpath.txt. Cannot find scan config path file.");
+        return;
     }
 
     QTextStream in(&file);
@@ -36,38 +37,36 @@ ConfigManager::ConfigManager() {
     if (candidatePath.isEmpty()) {
         showProblemDialog("Error: configpath.txt is empty.",
                           "Please specify a valid configuration file path in configpath.txt.");
-        throw std::runtime_error("configpath.txt is empty");
+        return;
     }
 
     QList<QString> parts = candidatePath.split("=");
     if (parts.size() != 2) {
         showProblemDialog("Error: configpath.txt is not formatted correctly.",
                           "Please format the file as 'CONFIG_FILE_PATH=<path>'");
-        throw std::runtime_error("configpath.txt is not formatted correctly");
+        return;
     }
     if (parts[0] != "CONFIG_FILE_PATH") {
         showProblemDialog("Error: configpath.txt is not formatted correctly.",
                           "Please format the file as 'CONFIG_FILE_PATH=<path>'");
-        throw std::runtime_error("configpath.txt is not formatted correctly");
+        return;
     }
     if (parts[1].isEmpty()) {
         showProblemDialog("Error: configpath.txt is empty.",
                           "Please specify a valid configuration file path in configpath.txt.");
-        throw std::runtime_error("The config file path is empty. Please specify a path in configpath.txt.");
+        return;
     }
     if (!parts[1].endsWith(".json")) {
         showProblemDialog("Error: The config file must be a .json file.",
                           "Please specify a valid configuration file path in configpath.txt.");
-        throw std::runtime_error("The config file must be a .json file.");
+        return;
     }
 
     configFilePath = parts[1];
     loadConfigFromFile(configFilePath);
 }
 
-ConfigManager::~ConfigManager() {
-    updateConfigFile();
-}
+ConfigManager::~ConfigManager() = default;
 
 void ConfigManager::loadConfigFromFile(QString &path) {
     // Open the .json config and read it into memory
@@ -75,14 +74,14 @@ void ConfigManager::loadConfigFromFile(QString &path) {
     if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
         showProblemDialog("Error: Could not open config file for reading.",
                           "Cannot open the scan config file for reading.");
-        throw std::runtime_error("Could not open config file for reading.");
+        return;
     }
 
     QJsonDocument jsonDocument = QJsonDocument::fromJson(file.readAll());
     if (jsonDocument.isNull()) {
         showProblemDialog("Error: The config file is not a valid .json file.",
                           "The scan config file is not a properly formatted JSON.");
-        throw std::runtime_error("The config file is not a valid .json file.");
+        return;
     }
 
     // Parse the .json file
@@ -93,7 +92,7 @@ void ConfigManager::loadConfigFromFile(QString &path) {
     if (newFileTypes.isNull() || newScanPatterns.isNull() || !newFileTypes.isArray() || !newScanPatterns.isArray()) {
         showProblemDialog("Error: The config file is not formatted correctly.",
                           "The scan config file is not in expected format.");
-        throw std::runtime_error("The config file is not formatted correctly.");
+        return;
     }
 
     QJsonArray fileTypesArray = newFileTypes.toArray();
@@ -108,7 +107,8 @@ void ConfigManager::loadConfigFromFile(QString &path) {
             QString fileType = obj["fileType"].toString();
             QString description = obj["description"].toString();
             if (fileType.isNull() || description.isNull() || fileType.isEmpty() || description.isEmpty()) {
-                qDebug() << "The file type or description is null or empty.";
+                showProblemDialog("Warning: Could not load all file types and scan patterns.",
+                                  "Some file types could not be loaded.");
                 fileTypesError = true;
                 continue;
             }
@@ -125,7 +125,8 @@ void ConfigManager::loadConfigFromFile(QString &path) {
             QString description = obj["description"].toString();
             if (scanPattern.isNull() || description.isNull() ||
                 scanPattern.isEmpty() || description.isEmpty()) {
-                qDebug() << "The scan pattern or description is null or empty.";
+                showProblemDialog("Warning: Could not load all file types and scan patterns.",
+                                  "Some scan patterns could not be loaded.");
                 scanPatternsError = true;
                 continue;
             }
@@ -213,20 +214,15 @@ void ConfigManager::updateConfigFile() {
     QJsonDocument doc(obj);
     QFile file(configFilePath);
     if (!file.open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Truncate)) {
-        throw std::runtime_error("Could not open config file for writing.");
+        showProblemDialog("Error: Could not open config file for writing.",
+                          "Cannot open the scan config file for writing.");
+        return;
     }
 
     QTextStream out(&file);
     out << doc.toJson();
 
     file.close();
-}
-
-QList<QPair<QString, QString>> ConfigManager::getConfigList() {
-    QList<QPair<QString, QString>> configList;
-    configList.append(fileTypes);
-    configList.append(scanPatterns);
-    return configList;
 }
 
 void ConfigManager::editScanPattern(int index, QString &scanPattern, QString &description) {
