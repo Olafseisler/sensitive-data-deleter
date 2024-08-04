@@ -47,7 +47,6 @@ public:
     void deleteFiles(std::vector<std::string> &filePaths);
 
     void scrambleFile(const std::string &filePath);
-
 };
 
 

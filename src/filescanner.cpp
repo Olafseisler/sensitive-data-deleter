@@ -16,7 +16,7 @@
 #define MAX_NUM_MATCHES 100
 
 FileScanner::FileScanner() {
-    // Constructor
+
 }
 
 FileScanner::~FileScanner() {
@@ -42,8 +42,8 @@ FileScanner::scanFiles(QPromise<std::map<std::string, std::pair<ScanResult, std:
         promise.setProgressValue(static_cast<int>((100 * i) / filePaths.size()));
 
         // If the file is not a text file based on MIME type, skip the file
-        QString mimeType = QMimeDatabase().mimeTypeForFile(QString::fromStdString(filePath)).name();
-        if (!mimeType.contains("text")) {
+        QMimeType mimeType = QMimeDatabase().mimeTypeForFile(QString::fromStdString(filePath));
+        if (!mimeType.inherits("text/plain")) {
             matches[filePath] = std::make_pair(ScanResult::UNSUPPORTED_TYPE, std::vector<MatchInfo>());
             continue;
         }

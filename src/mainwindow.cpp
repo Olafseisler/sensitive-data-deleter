@@ -177,7 +177,7 @@ void MainWindow::setupUI() {
 
         if (column1 == nullptr || column1->text().isEmpty()) {
             if (scanPatternsTableWidget->item(item->row(), 1)) {
-                scanPatternsTableWidget->item(item->row(), 1)->setToolTip("File type can not be empty");
+                scanPatternsTableWidget->item(item->row(), 1)->setToolTip("Scan pattern can not be empty");
                 scanPatternsTableWidget->item(item->row(), 1)->setBackground(QBrush(QColor(255, 0, 0, 50)));
             }
             return;
