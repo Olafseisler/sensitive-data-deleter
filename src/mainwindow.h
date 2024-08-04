@@ -53,6 +53,8 @@ private slots:
 
     void on_addFiletypeButton_clicked();
 
+    void on_newConfigButton_clicked();
+
 private:
     QTreeWidget *fileTreeWidget;
     QTreeWidget *flaggedFilesTreeWidget;
@@ -100,6 +102,8 @@ private:
 
     void handleFlaggedScanItem(const std::pair<std::string, std::pair<ScanResult, std::vector<MatchInfo>>> &match,
                                uint8_t &scanResultBits);
+
+    void updateConfigPresentation();
 };
 
 #endif //SENSITIVE_DATA_DELETER_MAINWINDOW_H

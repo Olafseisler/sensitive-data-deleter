@@ -69,6 +69,8 @@ ConfigManager::ConfigManager() {
 ConfigManager::~ConfigManager() = default;
 
 void ConfigManager::loadConfigFromFile(QString &path) {
+    this->scanPatterns.clear();
+    this->fileTypes.clear();
     // Open the .json config and read it into memory
     QFile file(path);
     if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
@@ -257,7 +259,20 @@ bool ConfigManager::isValidRegex(QString pattern) {
     return true;
 }
 
+void ConfigManager::setConfigFilePath(QString &path) {
+    configFilePath = path;
+    // Update the configpath.txt file
+    QFile file("configpath.txt");
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Truncate)) {
+        showProblemDialog("Error: Could not open configpath.txt for writing.",
+                          "Cannot open the configpath.txt file for writing.");
+        return;
+    }
 
+    QTextStream out(&file);
+    out << "CONFIG_FILE_PATH=" << path;
+    file.close();
+}
 
 
 

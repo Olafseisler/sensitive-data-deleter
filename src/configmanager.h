@@ -25,6 +25,7 @@ public:
     QList<QPair<QString, QString>> getFileTypes();
     QList<QPair<QString, QString>> getScanPatterns();
     void updateConfigFile();
+    void setConfigFilePath(QString &path);
 
 private:
     QString configFilePath;

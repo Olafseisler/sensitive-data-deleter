@@ -38,6 +38,7 @@ void MainWindow::setupUI() {
     flaggedFilesTreeWidget->setColumnCount(1);
     flaggedFilesTreeWidget->setSelectionBehavior(QAbstractItemView::SelectRows);
     flaggedFilesTreeWidget->setSelectionMode(QAbstractItemView::MultiSelection);
+    connect(watcher, &QFileSystemWatcher::directoryChanged, this, &MainWindow::onDirectoryChanged);
 
     fileTypesTableWidget->setColumnCount(4);
     scanPatternsTableWidget->setColumnCount(4);
@@ -51,7 +52,16 @@ void MainWindow::setupUI() {
     flaggedFilesTreeWidget->setHeaderLabel("Flagged Files");
     fileTreeWidget->setHeaderLabel("Files and Folders");
 
-    // Load the config
+    updateConfigPresentation();
+}
+
+void MainWindow::updateConfigPresentation() {
+    // Clear current items in the file types and scan patterns tables
+    fileTypesTableWidget->clearContents();
+    fileTypesTableWidget->setRowCount(0);
+    scanPatternsTableWidget->clearContents();
+    scanPatternsTableWidget->setRowCount(0);
+
     QList<QPair<QString, QString>> fileTypes = configManager->getFileTypes();
             foreach (const auto &fileType, fileTypes) {
             int row = fileTypesTableWidget->rowCount();
@@ -99,7 +109,7 @@ void MainWindow::setupUI() {
             return;
         } else {
             // Set the background to white if the file type is not empty
-            if (fileTypesTableWidget->item(item->row(), 1)){
+            if (fileTypesTableWidget->item(item->row(), 1)) {
                 fileTypesTableWidget->item(item->row(), 1)->setBackground(QBrush(QColor(0, 0, 0, 0)));
                 fileTypesTableWidget->item(item->row(), 1)->setToolTip("");
             }
@@ -113,7 +123,7 @@ void MainWindow::setupUI() {
             return;
         } else {
             // Set the background to transparent if the description is not empty
-            if (fileTypesTableWidget->item(item->row(), 2)){
+            if (fileTypesTableWidget->item(item->row(), 2)) {
                 fileTypesTableWidget->item(item->row(), 2)->setBackground(QBrush(QColor(0, 0, 0, 0)));
                 fileTypesTableWidget->item(item->row(), 2)->setToolTip("");
             }
@@ -168,8 +178,6 @@ void MainWindow::setupUI() {
     scanPatternsTableWidget->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
     scanPatternsTableWidget->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Stretch);
 
-    connect(watcher, &QFileSystemWatcher::directoryChanged, this, &MainWindow::onDirectoryChanged);
-
     // Update the config file if any item in fileTypesTableWidget is edited
     connect(scanPatternsTableWidget, &QTableWidget::itemChanged, [this](QTableWidgetItem *item) {
         auto *column1 = scanPatternsTableWidget->item(item->row(), 1);
@@ -182,7 +190,7 @@ void MainWindow::setupUI() {
             }
             return;
         } else {
-            if (scanPatternsTableWidget->item(item->row(), 1)){
+            if (scanPatternsTableWidget->item(item->row(), 1)) {
                 scanPatternsTableWidget->item(item->row(), 1)->setBackground(QBrush(QColor(0, 0, 0, 0)));
                 scanPatternsTableWidget->item(item->row(), 1)->setToolTip("");
             }
@@ -196,7 +204,7 @@ void MainWindow::setupUI() {
             return;
         } else {
             // Set the background to transparent if the description is not empty
-            if (scanPatternsTableWidget->item(item->row(), 2)){
+            if (scanPatternsTableWidget->item(item->row(), 2)) {
                 scanPatternsTableWidget->item(item->row(), 2)->setBackground(QBrush(QColor(0, 0, 0, 0)));
                 scanPatternsTableWidget->item(item->row(), 2)->setToolTip("");
             }
@@ -205,7 +213,8 @@ void MainWindow::setupUI() {
         if (!configManager->isValidRegex(column1->text())) {
             qDebug() << "The scan pattern is not a valid regex expression.";
             scanPatternsTableWidget->item(item->row(), 1)->setBackground(QBrush(QColor(255, 0, 0, 50)));
-            scanPatternsTableWidget->item(item->row(), 1)->setToolTip("The scan pattern is not a valid regex expression.");
+            scanPatternsTableWidget->item(item->row(), 1)->setToolTip(
+                    "The scan pattern is not a valid regex expression.");
             return;
         } else {
             scanPatternsTableWidget->item(item->row(), 1)->setBackground(QBrush(QColor(0, 0, 0, 0)));
@@ -749,8 +758,8 @@ void MainWindow::on_scanButton_clicked() {
 
     // If there are no file types or scan patterns selected, show a popup and return
     if (checkedFileTypes.empty() || checkedScanPatterns.empty()) {
-        auto *noSelectionDialog = createInfoDialog("No file types or scan patterns selected",
-                                                "Please select at least one file type and one scan pattern to scan.");
+        createInfoDialog("No file types or scan patterns selected",
+                         "Please select at least one file type and one scan pattern to scan.");
         return;
     }
 
@@ -1059,5 +1068,23 @@ void MainWindow::on_addFiletypeButton_clicked() {
     // Debug output to verify item state after modification
     qDebug() << "New item at row:" << row << "with final check state:"
              << fileTypesTableWidget->item(row, 0)->checkState();
+}
+
+
+void MainWindow::on_newConfigButton_clicked() {
+    // Open a file dialog to load alternative config file
+    QString fileName = QFileDialog::getSaveFileName(this, tr("Load alternative configuration File"),
+                                                    QDir::currentPath(),
+                                                    tr("JSON Files (*.json)"));
+    if (fileName.isEmpty()) {
+        qDebug() << "No file selected";
+        createInfoDialog("No file selected", "No file selected. Configuration not saved.");
+        return;
+    }
+
+
+    configManager->setConfigFilePath(fileName);
+    configManager->loadConfigFromFile(fileName);
+    updateConfigPresentation();
 }
 
