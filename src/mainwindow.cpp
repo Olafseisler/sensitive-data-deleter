@@ -62,7 +62,7 @@ void MainWindow::updateConfigPresentation() {
     scanPatternsTableWidget->clearContents();
     scanPatternsTableWidget->setRowCount(0);
 
-    QList<QPair<QString, QString>> fileTypes = configManager->getFileTypes();
+    QList<QPair<QString, QString>> fileTypes = configManager->fileTypes;
             foreach (const auto &fileType, fileTypes) {
             int row = fileTypesTableWidget->rowCount();
             fileTypesTableWidget->insertRow(row);
@@ -141,7 +141,7 @@ void MainWindow::updateConfigPresentation() {
     fileTypesTableWidget->setColumnWidth(2, (int) (fileTypesTableWidget->width() * 0.3));
     fileTypesTableWidget->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Stretch);
 
-    QList<QPair<QString, QString>> scanPatterns = configManager->getScanPatterns();
+    QList<QPair<QString, QString>> scanPatterns = configManager->scanPatterns;
             foreach (const auto &scanPattern, scanPatterns) {
             int row = scanPatternsTableWidget->rowCount();
             scanPatternsTableWidget->insertRow(row);
@@ -1070,10 +1070,12 @@ void MainWindow::on_addFiletypeButton_clicked() {
              << fileTypesTableWidget->item(row, 0)->checkState();
 }
 
-
+/**
+ * Select an alternative existing config file
+ */
 void MainWindow::on_newConfigButton_clicked() {
     // Open a file dialog to load alternative config file
-    QString fileName = QFileDialog::getSaveFileName(this, tr("Load alternative configuration File"),
+    QString fileName = QFileDialog::getOpenFileName(this, tr("Load alternative configuration File"),
                                                     QDir::currentPath(),
                                                     tr("JSON Files (*.json)"));
     if (fileName.isEmpty()) {
@@ -1082,8 +1084,54 @@ void MainWindow::on_newConfigButton_clicked() {
         return;
     }
 
+    QFile file(fileName);
+    // If the file is empty or nonexistent
+    if (!file.exists()){
+        qDebug() << "File " << fileName << " does not exist";
+        createInfoDialog("File does not exist", "The selected file does not exist or could not be found or opened.");
+        return;
+    }
 
     configManager->setConfigFilePath(fileName);
+    configManager->loadConfigFromFile(fileName);
+    updateConfigPresentation();
+}
+
+
+/**
+ * Start a new fresh config
+ */
+void MainWindow::on_startConfigButton_clicked()
+{
+    // Open a file dialog to save the new config file
+    QString fileName = QFileDialog::getSaveFileName(this, tr("Save new configuration File"),
+                                                    QDir::currentPath(),
+                                                    tr("JSON Files (*.json)"));
+    if (fileName.isEmpty()) {
+        qDebug() << "No file selected";
+        createInfoDialog("No file selected", "No file selected. Configuration not saved.");
+        return;
+    }
+
+    if (!fileName.endsWith(".json")) {
+        qDebug() << "Invalid file extension";
+        createInfoDialog("Invalid file extension", "Please select a file with a .json extension.");
+        return;
+    }
+
+    QFile file(fileName);
+    if (!file.open(QIODevice::WriteOnly)) {
+        qDebug() << "Could not open file " << fileName << " for writing";
+        createInfoDialog("Could not open file", "Could not open the file for writing. Please try again.");
+        return;
+    }
+    file.close();
+
+
+    configManager->setConfigFilePath(fileName);
+    configManager->scanPatterns.clear();
+    configManager->fileTypes.clear();
+    configManager->updateConfigFile();
     configManager->loadConfigFromFile(fileName);
     updateConfigPresentation();
 }

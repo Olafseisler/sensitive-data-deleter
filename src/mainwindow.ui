@@ -473,7 +473,7 @@
                <enum>QLayout::SetMaximumSize</enum>
               </property>
               <item>
-               <widget class="QPushButton" name="loadConfigButton">
+               <widget class="QPushButton" name="startConfigButton">
                 <property name="toolTip">
                  <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Create a new scan configuration file&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
                 </property>

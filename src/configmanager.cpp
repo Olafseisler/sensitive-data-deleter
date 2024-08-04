@@ -276,3 +276,4 @@ void ConfigManager::setConfigFilePath(QString &path) {
 
 
 
+

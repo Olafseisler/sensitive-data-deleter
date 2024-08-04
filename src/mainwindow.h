@@ -55,6 +55,8 @@ private slots:
 
     void on_newConfigButton_clicked();
 
+    void on_startConfigButton_clicked();
+
 private:
     QTreeWidget *fileTreeWidget;
     QTreeWidget *flaggedFilesTreeWidget;

@@ -21,16 +21,16 @@ public:
     void removeScanPattern(QString &scanPattern);
     void editScanPattern(int index, QString &scanPattern, QString &description);
     bool isValidRegex(QString pattern);
-    QList<QPair<QString, QString>> getConfigList();
     QList<QPair<QString, QString>> getFileTypes();
     QList<QPair<QString, QString>> getScanPatterns();
     void updateConfigFile();
     void setConfigFilePath(QString &path);
+    QList<QPair<QString, QString>> fileTypes;
+    QList<QPair<QString, QString>> scanPatterns;
+
 
 private:
     QString configFilePath;
-    QList<QPair<QString, QString>> fileTypes;
-    QList<QPair<QString, QString>> scanPatterns;
     QList<QString> immutableTypes = {".txt"};
 };
 
