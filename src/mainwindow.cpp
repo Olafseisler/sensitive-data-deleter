@@ -597,32 +597,32 @@ MainWindow::handleFlaggedScanItem(const std::pair<std::string, std::pair<ScanRes
         case ScanResult::CLEAN:
             setRowBackgroundColor(scanTreeItem, QColor(0, 255, 0, 50), columnCount);
             scanTreeItem->setToolTip(0, "No sensitive data found");
-            scanResultBits = scanResultBits | 0x1;
+            scanResultBits = scanResultBits | 0b00000001;
             break;
         case ScanResult::DIRECTORY_TOO_DEEP:
             setRowBackgroundColor(scanTreeItem, QColor(128, 128, 128, 50), columnCount);
             scanTreeItem->setToolTip(0, "Directory is too deep to scan");
-            scanResultBits = scanResultBits | 0x2;
+            scanResultBits = scanResultBits | 0b00000010;
             break;
         case ScanResult::FLAGGED:
             setRowBackgroundColor(scanTreeItem, QColor(255, 255, 0, 50), columnCount);
             scanTreeItem->setToolTip(0, "Sensitive data found");
-            scanResultBits = scanResultBits | 0x3;
+            scanResultBits = scanResultBits | 0b00000100;
             break;
         case ScanResult::UNSUPPORTED_TYPE:
             setRowBackgroundColor(scanTreeItem, QColor(150, 150, 150, 50), columnCount);
             scanTreeItem->setToolTip(0, "Unsupported file type");
-            scanResultBits = scanResultBits | 0x4;
+            scanResultBits = scanResultBits | 0b00001000;
             break;
         case ScanResult::READ_PERMS_FAIL:
             setRowBackgroundColor(scanTreeItem, QColor(255, 0, 0, 50), columnCount);
             scanTreeItem->setToolTip(0, "Could not read file due to permissions");
-            scanResultBits = scanResultBits | 0x5;
+            scanResultBits = scanResultBits | 0b00010000;
             break;
         case ScanResult::WRITE_PERMS_FAIL:
             setRowBackgroundColor(scanTreeItem, QColor(255, 120, 0, 50), columnCount);
             scanTreeItem->setToolTip(0, "Can not write to or delete file due to permissions. This may cause issues.");
-            scanResultBits = scanResultBits | 0x6;
+            scanResultBits = scanResultBits | 0b00100000;
             break;
         default:
             break;
@@ -639,18 +639,25 @@ void MainWindow::setRowBackgroundColor(QTreeWidgetItem *item, const QColor &colo
 }
 
 QString getWarningMessage(uint8_t scanResultBits) {
+    if (scanResultBits == 1) {
+        return "No issues found during the scan.";
+    }
+
     QString warningMessage = "The following issues were encountered during the scan:\n";
-    if (scanResultBits & 0x2) {
-        warningMessage += "Some directories are too deep to scan.\n";
+    if (scanResultBits & 0b00000010) {
+        warningMessage += "Some directories were too deep to scan.\n";
     }
-    if (scanResultBits & 0x4) {
-        warningMessage += "Some files are of unsupported type.\n";
+    if (scanResultBits & 0b00000100) {
+        warningMessage += "Sensitive data was found in some files.\n";
     }
-    if (scanResultBits & 0x5) {
+    if (scanResultBits & 0b00001000) {
+        warningMessage += "Some files had unsupported file types.\n";
+    }
+    if (scanResultBits & 0b00010000) {
         warningMessage += "Some files could not be read due to permissions.\n";
     }
-    if (scanResultBits & 0x6) {
-        warningMessage += "Some files can not be written to or deleted due to permissions\n";
+    if (scanResultBits & 0b00100000) {
+        warningMessage += "Some scanned files can not be written to or deleted due to permissions.\n";
     }
     return warningMessage;
 }

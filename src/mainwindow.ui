@@ -373,6 +373,9 @@
          <layout class="QHBoxLayout" name="horizontalLayout_7">
           <item>
            <layout class="QVBoxLayout" name="verticalLayout_7">
+            <property name="sizeConstraint">
+             <enum>QLayout::SetMaximumSize</enum>
+            </property>
             <item>
              <widget class="QLabel" name="label_3">
               <property name="text">
@@ -386,7 +389,10 @@
                <enum>QLayout::SetDefaultConstraint</enum>
               </property>
               <item>
-               <layout class="QHBoxLayout" name="horizontalLayout_5">
+               <layout class="QHBoxLayout" name="horizontalLayout_5" stretch="0,0,0,0">
+                <property name="sizeConstraint">
+                 <enum>QLayout::SetMaximumSize</enum>
+                </property>
                 <item>
                  <widget class="QLabel" name="label">
                   <property name="text">
@@ -418,13 +424,6 @@
                     <horstretch>0</horstretch>
                     <verstretch>0</verstretch>
                    </sizepolicy>
-                  </property>
-                 </widget>
-                </item>
-                <item>
-                 <widget class="QPushButton" name="addFiletypeButton">
-                  <property name="text">
-                   <string>Add Filetype</string>
                   </property>
                  </widget>
                 </item>
@@ -463,9 +462,15 @@
           <item>
            <layout class="QVBoxLayout" name="verticalLayout_8">
             <item>
-             <layout class="QHBoxLayout" name="horizontalLayout_6">
+             <layout class="QHBoxLayout" name="horizontalLayout_6" stretch="0,0,0,0,0">
+              <property name="sizeConstraint">
+               <enum>QLayout::SetMaximumSize</enum>
+              </property>
               <item>
                <widget class="QPushButton" name="pushButton">
+                <property name="toolTip">
+                 <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Create a new scan configuration file&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+                </property>
                 <property name="text">
                  <string>New Config</string>
                 </property>
@@ -473,13 +478,29 @@
               </item>
               <item>
                <widget class="QPushButton" name="pushButton_2">
+                <property name="toolTip">
+                 <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Load scan configuration from an alternative file. &lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+                </property>
                 <property name="text">
                  <string>Load Config</string>
                 </property>
                </widget>
               </item>
               <item>
+               <widget class="QPushButton" name="addFiletypeButton">
+                <property name="toolTip">
+                 <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Add new file type (extension) to current scan configuration&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+                </property>
+                <property name="text">
+                 <string>Add Filetype</string>
+                </property>
+               </widget>
+              </item>
+              <item>
                <widget class="QPushButton" name="addPatternButton">
+                <property name="toolTip">
+                 <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Add new regular expression (regex) pattern to current scan configuration&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+                </property>
                 <property name="text">
                  <string>Add Pattern</string>
                 </property>
@@ -502,6 +523,11 @@
             </item>
             <item>
              <widget class="QTableWidget" name="scanPatternsTableWidget">
+              <property name="font">
+               <font>
+                <kerning>true</kerning>
+               </font>
+              </property>
               <column>
                <property name="text">
                 <string/>
