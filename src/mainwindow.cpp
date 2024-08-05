@@ -398,7 +398,6 @@ void MainWindow::on_addFolderButton_clicked() {
             constructScanTreeViewRecursively(parentItem, dirPath, 0, true);
         });
 
-        futureWatcher->setFuture(future);
         auto *progressDialog = new QProgressDialog("Adding directory", "Cancel", 0, 100);
         progressDialog->setMinimumDuration(2000);
         QObject::connect(progressDialog, &QProgressDialog::canceled, [futureWatcher, progressDialog]() {
@@ -416,7 +415,8 @@ void MainWindow::on_addFolderButton_clicked() {
             progressDialog->deleteLater();
             futureWatcher->deleteLater();
         });
-
+        futureWatcher->setFuture(future);
+        progressDialog->exec();
         return;
     }
 
@@ -623,20 +623,23 @@ MainWindow::handleFlaggedScanItem(const std::pair<std::string, std::pair<ScanRes
             scanTreeItem->setToolTip(0, "Unsupported file type");
             scanResultBits = scanResultBits | 0b00001000;
             break;
-        case ScanResult::READ_PERMS_FAIL:
+        case ScanResult::UNREADABLE:
             setRowBackgroundColor(scanTreeItem, QColor(255, 0, 0, 50), columnCount);
-            scanTreeItem->setToolTip(0, "Could not read file due to permissions");
+            scanTreeItem->setToolTip(0, "Could not read file likely due to permissions");
             scanResultBits = scanResultBits | 0b00010000;
             break;
-        case ScanResult::WRITE_PERMS_FAIL:
+        case ScanResult::FLAGGED_BUT_IMMUTABLE:
             setRowBackgroundColor(scanTreeItem, QColor(255, 120, 0, 50), columnCount);
-            scanTreeItem->setToolTip(0, "Can not write to or delete file due to permissions. This may cause issues.");
+            scanTreeItem->setToolTip(0,
+                                     "File has sensitive data but cannot bew written to or deleted "
+                                     "due to permissions. This may cause issues.");
             scanResultBits = scanResultBits | 0b00100000;
             break;
         default:
             break;
     }
-    if (match.second.first != ScanResult::CLEAN) {
+    if (match.second.first != ScanResult::CLEAN &&
+        match.second.first != ScanResult::UNSUPPORTED_TYPE) {
         expandToFlaggedItem(scanTreeItem);
     }
 }
@@ -653,17 +656,17 @@ QString getWarningMessage(uint8_t scanResultBits) {
     }
 
     QString warningMessage = "The following issues were encountered during the scan:\n";
-    if (scanResultBits & 0b00000010) {
-        warningMessage += "Some directories were too deep to scan.\n";
-    }
     if (scanResultBits & 0b00000100) {
         warningMessage += "Sensitive data was found in some files.\n";
+    }
+    if (scanResultBits & 0b00000010) {
+        warningMessage += "Some directories were too deep to scan.\n";
     }
     if (scanResultBits & 0b00001000) {
         warningMessage += "Some files had unsupported file types.\n";
     }
     if (scanResultBits & 0b00010000) {
-        warningMessage += "Some files could not be read due to permissions.\n";
+        warningMessage += "Some files could not be read likely due to permissions.\n";
     }
     if (scanResultBits & 0b00100000) {
         warningMessage += "Some scanned files can not be written to or deleted due to permissions.\n";
@@ -802,7 +805,6 @@ void MainWindow::on_scanButton_clicked() {
         return;
     }
     auto future = QtConcurrent::run(&FileScanner::scanFiles, filePaths, checkedScanPatterns, checkedFileTypes);
-    futureWatcher->setFuture(future);
 
     auto *progressDialog = new QProgressDialog("Scanning in progress", "Cancel", 0, 100);
     progressDialog->setAutoReset(false);
@@ -841,6 +843,8 @@ void MainWindow::on_scanButton_clicked() {
                          });
                          qDebug() << "Processed " << originalFilePathsSize << " files.";
                      });
+    futureWatcher->setFuture(future);
+    progressDialog->exec();
 }
 
 void MainWindow::on_removeSelectedButton_2_clicked() {
@@ -874,7 +878,6 @@ void MainWindow::on_removeSelectedButton_2_clicked() {
             }
         }
     });
-    futureWatcher->setFuture(future);
 
     auto *progressDialog = new QProgressDialog("Removing selected items", "Cancel", 0, 0);
     progressDialog->setMinimumDuration(2000);
@@ -894,6 +897,7 @@ void MainWindow::on_removeSelectedButton_2_clicked() {
         futureWatcher->deleteLater();
     });
 
+    futureWatcher->setFuture(future);
     progressDialog->exec();
 }
 
@@ -1086,7 +1090,7 @@ void MainWindow::on_newConfigButton_clicked() {
 
     QFile file(fileName);
     // If the file is empty or nonexistent
-    if (!file.exists()){
+    if (!file.exists()) {
         qDebug() << "File " << fileName << " does not exist";
         createInfoDialog("File does not exist", "The selected file does not exist or could not be found or opened.");
         return;
@@ -1101,8 +1105,7 @@ void MainWindow::on_newConfigButton_clicked() {
 /**
  * Start a new fresh config
  */
-void MainWindow::on_startConfigButton_clicked()
-{
+void MainWindow::on_startConfigButton_clicked() {
     // Open a file dialog to save the new config file
     QString fileName = QFileDialog::getSaveFileName(this, tr("Save new configuration File"),
                                                     QDir::currentPath(),

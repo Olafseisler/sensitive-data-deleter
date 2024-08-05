@@ -16,9 +16,9 @@
 enum ScanResult {
     CLEAN,
     FLAGGED,
+    FLAGGED_BUT_IMMUTABLE,
     UNSUPPORTED_TYPE,
-    READ_PERMS_FAIL,
-    WRITE_PERMS_FAIL,
+    UNREADABLE,
     DIRECTORY_TOO_DEEP,
     UNDEFINED
 };
@@ -43,6 +43,10 @@ public:
 
     static std::pair<ScanResult, std::vector<MatchInfo>>
     scanFileForSensitiveData(const std::filesystem::path &filePath, const std::map<std::string, std::string> &patterns);
+
+    static std::pair<ScanResult, std::vector<MatchInfo>> scanChunkWithRegex(const std::string &chunk,
+                       const std::map<std::string,
+                               std::string> &patterns);
 
     void deleteFiles(std::vector<std::string> &filePaths);
 

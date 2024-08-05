@@ -1,0 +1,10 @@
+{
+  "name": "sensitive-data-deleter",
+  "version": "0.1",
+  "dependencies": [
+    "qtbase",
+    "poppler",
+    "hyperscan",
+    "pkgconf"
+  ]
+}
