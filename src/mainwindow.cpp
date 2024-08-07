@@ -634,7 +634,8 @@ MainWindow::handleFlaggedScanItem(const std::pair<std::string, std::pair<ScanRes
         default:
             break;
     }
-    if (match.second.first != ScanResult::CLEAN) {
+    if (match.second.first != ScanResult::CLEAN &&
+        match.second.first != ScanResult::UNSUPPORTED_TYPE) {
         expandToFlaggedItem(scanTreeItem);
     }
 }
@@ -669,7 +670,7 @@ QString getWarningMessage(uint8_t scanResultBits) {
     return warningMessage;
 }
 
-void MainWindow::processScanResults(std::map<std::string, std::pair<ScanResult, std::vector<MatchInfo>>> &matches,
+void MainWindow::processScanResults(std::map<std::string, std::pair<ScanResult, std::vector<MatchInfo>>> matches,
                                     QProgressDialog *progressDialog) {
     uint8_t scanResultBits = 0;
     for (const auto &match: matches) {
@@ -733,7 +734,7 @@ void MainWindow::processScanResults(std::map<std::string, std::pair<ScanResult, 
 
         flaggedItems[match.first] = item;
     }
-    progressDialog->setLabelText(progressDialog->labelText() + getWarningMessage(scanResultBits));
+    progressDialog->setLabelText("Done." + getWarningMessage(scanResultBits));
     qDebug() << "Asynchronous task completed. Results processed.";
 }
 
@@ -826,8 +827,6 @@ void MainWindow::on_scanButton_clicked() {
                          progressDialog->setValue(100);
                          progressDialog->setLabelText("Constructing results...");
                          auto results = futureWatcher->result();  // Get the results when finished
-                         progressDialog->setLabelText("Done. Processed " + QString::number(originalFilePathsSize) +
-                                                      " files.\n");
                          processScanResults(results, progressDialog); // Process results here
                          futureWatcher->deleteLater();
                          // Disconnect the "cancel button" signal

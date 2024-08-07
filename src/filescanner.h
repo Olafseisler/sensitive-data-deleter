@@ -39,17 +39,16 @@ struct MatchInfo {
 };
 
 class ThreadSafeQueue {
-protected:
-public:
-
-    std::vector<std::string> queue;
+private:
     std::mutex mutex;
     std::condition_variable cond;
     bool done = false;
 
+public:
+    std::queue<std::filesystem::path> queue;
     void push(const std::filesystem::path &item) {
         std::lock_guard<std::mutex> lock(mutex);
-        queue.push_back(item);
+        queue.push(item);
         cond.notify_one();
     }
 
@@ -57,8 +56,8 @@ public:
         std::unique_lock<std::mutex> lock(mutex);
         cond.wait(lock, [this] { return !queue.empty() || done; });
         if (queue.empty()) return false;
-        item = queue.back();
-        queue.pop_back();
+        item = queue.front();
+        queue.pop();
         return true;
     }
 
@@ -85,7 +84,10 @@ public:
                              const std::map<std::string, std::string> &patterns);
 
     void scannerWorker(const std::map<std::string, std::string> &patterns,
-                  const std::map<std::string, std::string> &fileTypes);
+                  const std::map<std::string, std::string> &fileTypes,
+                  QPromise<std::map<std::string, std::pair<ScanResult, std::vector<MatchInfo>>>> &promise,
+                  std::atomic<size_t> &filesProcessed,
+                  size_t totalFiles);
 
     void scanChunkWithRegex(const std::string &chunk, const std::map<std::string, std::string> &patterns,std::pair<ScanResult, std::vector<MatchInfo>> &returnPair);
     void deleteFiles(std::vector<std::string> &filePaths);

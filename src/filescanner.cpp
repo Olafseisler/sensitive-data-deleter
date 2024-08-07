@@ -14,43 +14,59 @@
 #include "filescanner.h"
 #include "chunkreader.h"
 
-#define CHUNK_SIZE 4096
+#define CHUNK_SIZE 64 * 1024
 #define MAX_NUM_MATCHES 100
 
 
 void
 FileScanner::scanFiles(QPromise<std::map<std::string, std::pair<ScanResult, std::vector<MatchInfo>>>> &promise,
-                            const std::vector<std::string>& filePaths,
-                            const std::map<std::string, std::string>& patterns,
-                            const std::map<std::string, std::string>& fileTypes) {
+                       const std::vector<std::string> &filePaths,
+                       const std::map<std::string, std::string> &patterns,
+                       const std::map<std::string, std::string> &fileTypes) {
+
+
+    for (const auto &item: filePaths) {
+        file_queue.push(std::filesystem::path(item));
+    }
+
+
     // Scan files based on given patterns and file types
-    int i = 0;
-    this->file_queue.queue = filePaths;
+    std::atomic<size_t> filesProcessed = 0;
     std::vector<std::thread> threads;
     uint numThreads = std::thread::hardware_concurrency();
 
     for (uint j = 0; j < numThreads; j++) {
-        threads.emplace_back(&FileScanner::scannerWorker, this, std::ref(patterns), std::ref(fileTypes));
+        threads.emplace_back(&FileScanner::scannerWorker, this, std::ref(patterns), std::ref(fileTypes),
+                             std::ref(promise), std::ref(filesProcessed), filePaths.size());
     }
 
     file_queue.set_done();
 
-    for (auto &thread : threads) {
+    for (auto &thread: threads) {
         thread.join();
     }
 
     promise.addResult(matches);
-    promise.setProgressValue(100);
+
+    // Empty the matches list
+    matches.clear();
     promise.finish();
 }
 
 void FileScanner::scannerWorker(const std::map<std::string, std::string> &patterns,
-                                const std::map<std::string, std::string> &fileTypes) {
+                                const std::map<std::string, std::string> &fileTypes,
+                                QPromise<std::map<std::string, std::pair<ScanResult, std::vector<MatchInfo>>>> &promise,
+                                std::atomic<size_t> &filesProcessed,
+                                size_t totalFiles) {
     std::filesystem::path filePath;
     while (file_queue.pop(filePath)) {
         auto result = scanFileForSensitiveData(filePath, fileTypes, patterns);
-        std::lock_guard<std::mutex> lock(matches_mutex);
-        matches[filePath.string()] = result;
+        {
+            std::lock_guard<std::mutex> lock(matches_mutex);
+            matches[filePath.string()] = result;
+        }
+        size_t processed = ++filesProcessed;
+        promise.setProgressValue(static_cast<int>((processed * 100) / totalFiles));
     }
 }
 
@@ -74,10 +90,11 @@ FileScanner::scanFileForSensitiveData(const std::filesystem::path &filePath,
     }
 
     auto returnPair = std::make_pair(ScanResult::CLEAN, std::vector<MatchInfo>());
-    ChunkReader *chunkReader = nullptr;
+    std::unique_ptr<ChunkReader> chunkReader;
     try {
-        chunkReader = ChunkReaderFactory::createReader(filePath);
+        chunkReader.reset(ChunkReaderFactory::createReader(filePath));
     } catch (std::exception &e) {
+        qWarning() << "Error creating ChunkReader: " << e.what() << " for file: " << filePath.string();
         return std::make_pair(ScanResult::UNREADABLE, std::vector<MatchInfo>());
     }
 
@@ -90,9 +107,7 @@ FileScanner::scanFileForSensitiveData(const std::filesystem::path &filePath,
 
         std::string chunk(buffer, numBytesRead);
         scanChunkWithRegex(chunk, patterns, returnPair);
-
     }
-    delete chunkReader;
 
     return returnPair;
 }

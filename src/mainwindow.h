@@ -97,7 +97,7 @@ private:
 
     QDialog *createInfoDialog(const QString &title, const QString &labelText);
 
-    void processScanResults(std::map<std::string, std::pair<ScanResult, std::vector<MatchInfo>>> &matches,
+    void processScanResults(std::map<std::string, std::pair<ScanResult, std::vector<MatchInfo>>> matches,
                             QProgressDialog *progressDialog);
 
     void setRowBackgroundColor(QTreeWidgetItem *item, const QColor &color, int columnCount);
