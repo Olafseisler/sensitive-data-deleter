@@ -396,7 +396,6 @@ void MainWindow::on_addFolderButton_clicked() {
             constructScanTreeViewRecursively(parentItem, dirPath, 0, true);
         });
 
-        futureWatcher->setFuture(future);
         auto *progressDialog = new QProgressDialog("Adding directory", "Cancel", 0, 100);
         progressDialog->setMinimumDuration(2000);
         QObject::connect(progressDialog, &QProgressDialog::canceled, [futureWatcher, progressDialog]() {
@@ -414,6 +413,7 @@ void MainWindow::on_addFolderButton_clicked() {
             progressDialog->deleteLater();
             futureWatcher->deleteLater();
         });
+        futureWatcher->setFuture(future);
 
         return;
     }
@@ -423,7 +423,6 @@ void MainWindow::on_addFolderButton_clicked() {
     QFuture<void> future = QtConcurrent::run([this, dirPath]() {
         constructScanTreeViewRecursively(myRootItem, dirPath);
     });
-    futureWatcher->setFuture(future);
 
     auto *progressDialog = new QProgressDialog("Adding directory", "Cancel", 0, 0);
     QObject::connect(progressDialog, &QProgressDialog::canceled, [futureWatcher, progressDialog]() {
@@ -443,6 +442,7 @@ void MainWindow::on_addFolderButton_clicked() {
         futureWatcher->deleteLater();
 
     });
+    futureWatcher->setFuture(future);
 
     // Uncheck all items in the tree
     for (const auto &item: pathsToScan) {
@@ -800,7 +800,7 @@ void MainWindow::on_scanButton_clicked() {
         return;
     }
 
-    auto future = QtConcurrent::run(&FileScanner::scanFiles, &fileScanner, filePaths, checkedScanPatterns, checkedFileTypes);    futureWatcher->setFuture(future);
+    auto future = QtConcurrent::run(&FileScanner::scanFiles, &fileScanner, filePaths, checkedScanPatterns, checkedFileTypes);
 
     auto *progressDialog = new QProgressDialog("Scanning in progress", "Cancel", 0, 100);
     progressDialog->setAutoReset(false);
@@ -839,6 +839,7 @@ void MainWindow::on_scanButton_clicked() {
                          });
                          qDebug() << "Processed " << originalFilePathsSize << " files.";
                      });
+    futureWatcher->setFuture(future);
 }
 
 void MainWindow::on_removeSelectedButton_2_clicked() {
@@ -872,7 +873,6 @@ void MainWindow::on_removeSelectedButton_2_clicked() {
             }
         }
     });
-    futureWatcher->setFuture(future);
 
     auto *progressDialog = new QProgressDialog("Removing selected items", "Cancel", 0, 0);
     progressDialog->setMinimumDuration(2000);
@@ -891,7 +891,7 @@ void MainWindow::on_removeSelectedButton_2_clicked() {
         progressDialog->deleteLater();
         futureWatcher->deleteLater();
     });
-
+    futureWatcher->setFuture(future);
     progressDialog->exec();
 }
 

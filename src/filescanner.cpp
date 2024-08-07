@@ -25,45 +25,61 @@ FileScanner::scanFiles(QPromise<std::map<std::string, std::pair<ScanResult, std:
                             const std::map<std::string, std::string>& fileTypes) {
     // Scan files based on given patterns and file types
     int i = 0;
-    std::map<std::string, std::pair<ScanResult, std::vector<MatchInfo>>> matches;
+    this->file_queue.queue = filePaths;
+    std::vector<std::thread> threads;
+    uint numThreads = std::thread::hardware_concurrency();
 
-    for (const auto &filePath: filePaths) {
-        // If the file type is not in the list of file types, skip the file
-        for (const auto &item: fileTypes) {
-            if (filePath.find(item.first) != std::string::npos) {
-                break;
-            }
-        }
-        promise.setProgressValue(static_cast<int>((100 * i) / filePaths.size()));
-
-
-
-        std::pair<ScanResult, std::vector<MatchInfo>> fileMatches = scanFileForSensitiveData(filePath, patterns);
-        matches[filePath] = fileMatches;
-
-        ++i;
+    for (uint j = 0; j < numThreads; j++) {
+        threads.emplace_back(&FileScanner::scannerWorker, this, std::ref(patterns), std::ref(fileTypes));
     }
+
+    file_queue.set_done();
+
+    for (auto &thread : threads) {
+        thread.join();
+    }
+
     promise.addResult(matches);
     promise.setProgressValue(100);
     promise.finish();
 }
 
+void FileScanner::scannerWorker(const std::map<std::string, std::string> &patterns,
+                                const std::map<std::string, std::string> &fileTypes) {
+    std::filesystem::path filePath;
+    while (file_queue.pop(filePath)) {
+        auto result = scanFileForSensitiveData(filePath, fileTypes, patterns);
+        std::lock_guard<std::mutex> lock(matches_mutex);
+        matches[filePath.string()] = result;
+    }
+}
+
 std::pair<ScanResult, std::vector<MatchInfo>>
-FileScanner::scanFileForSensitiveData(const std::filesystem::path &filePath, const std::map<std::string, std::string> &patterns) {
+FileScanner::scanFileForSensitiveData(const std::filesystem::path &filePath,
+                                      const std::map<std::string, std::string> &fileTypes,
+                                      const std::map<std::string, std::string> &patterns) {
+
+    // Check if the file extension exists in the file types map
+    if (fileTypes.find(filePath.extension()) == fileTypes.end()) {
+        return std::make_pair(ScanResult::UNSUPPORTED_TYPE, std::vector<MatchInfo>());
+    }
+    // If the file is not a text file based on MIME type, skip the file
+    QMimeType mimeType = QMimeDatabase().mimeTypeForFile(QString::fromStdString(filePath));
+    if (!mimeType.inherits("text/plain") && !mimeType.inherits("application/pdf")) {
+        return std::make_pair(ScanResult::UNSUPPORTED_TYPE, std::vector<MatchInfo>());
+    }
     QFileInfo fileInfo(QString::fromStdString(filePath));
     if (!fileInfo.isReadable()) {
         return std::make_pair(ScanResult::UNREADABLE, std::vector<MatchInfo>());
     }
 
-    // If the file is not a text file based on MIME type, skip the file
-    QMimeType mimeType = QMimeDatabase().mimeTypeForFile(QString::fromStdString(filePath));
-    if (!mimeType.inherits("text/plain")) {
-        return std::make_pair(ScanResult::UNSUPPORTED_TYPE, std::vector<MatchInfo>());
-    }
-
     auto returnPair = std::make_pair(ScanResult::CLEAN, std::vector<MatchInfo>());
-
-    auto chunkReader = ChunkReaderFactory::createReader(filePath);
+    ChunkReader *chunkReader = nullptr;
+    try {
+        chunkReader = ChunkReaderFactory::createReader(filePath);
+    } catch (std::exception &e) {
+        return std::make_pair(ScanResult::UNREADABLE, std::vector<MatchInfo>());
+    }
 
     while (true) {
         char buffer[CHUNK_SIZE];
@@ -74,7 +90,9 @@ FileScanner::scanFileForSensitiveData(const std::filesystem::path &filePath, con
 
         std::string chunk(buffer, numBytesRead);
         scanChunkWithRegex(chunk, patterns, returnPair);
+
     }
+    delete chunkReader;
 
     return returnPair;
 }
