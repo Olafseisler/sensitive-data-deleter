@@ -16,14 +16,12 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
     configManager = new ConfigManager();
     watcher = new QFileSystemWatcher(this);
     setupUI();
-    fileScanner = new FileScanner();
 }
 
 MainWindow::~MainWindow() {
     delete ui;
     delete configManager;
     delete watcher;
-    delete fileScanner;
 }
 
 void MainWindow::setupUI() {
@@ -623,12 +621,12 @@ MainWindow::handleFlaggedScanItem(const std::pair<std::string, std::pair<ScanRes
             scanTreeItem->setToolTip(0, "Unsupported file type");
             scanResultBits = scanResultBits | 0b00001000;
             break;
-        case ScanResult::READ_PERMS_FAIL:
+        case ScanResult::UNREADABLE:
             setRowBackgroundColor(scanTreeItem, QColor(255, 0, 0, 50), columnCount);
             scanTreeItem->setToolTip(0, "Could not read file due to permissions");
             scanResultBits = scanResultBits | 0b00010000;
             break;
-        case ScanResult::WRITE_PERMS_FAIL:
+        case ScanResult::FLAGGED_BUT_UNWRITABLE:
             setRowBackgroundColor(scanTreeItem, QColor(255, 120, 0, 50), columnCount);
             scanTreeItem->setToolTip(0, "Can not write to or delete file due to permissions. This may cause issues.");
             scanResultBits = scanResultBits | 0b00100000;
@@ -801,8 +799,8 @@ void MainWindow::on_scanButton_clicked() {
     if (futureWatcher->isRunning()) {
         return;
     }
-    auto future = QtConcurrent::run(&FileScanner::scanFiles, filePaths, checkedScanPatterns, checkedFileTypes);
-    futureWatcher->setFuture(future);
+
+    auto future = QtConcurrent::run(&FileScanner::scanFiles, &fileScanner, filePaths, checkedScanPatterns, checkedFileTypes);    futureWatcher->setFuture(future);
 
     auto *progressDialog = new QProgressDialog("Scanning in progress", "Cancel", 0, 100);
     progressDialog->setAutoReset(false);
@@ -957,7 +955,7 @@ void MainWindow::on_deleteButton_clicked() {
 
     QList<std::string> flaggedItemsToRemove = flaggedItems.keys();
     std::vector<std::string> flaggedItemsToRemoveVector(flaggedItemsToRemove.begin(), flaggedItemsToRemove.end());
-    fileScanner->deleteFiles(flaggedItemsToRemoveVector);
+    fileScanner.deleteFiles(flaggedItemsToRemoveVector);
 
     // Remove all flagged files
     while (!flaggedItems.empty()) {

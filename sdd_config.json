@@ -23,6 +23,10 @@
         {
             "description": "Plain text",
             "fileType": ".txt"
+        },
+        {
+            "description": "Portable Document Format",
+            "fileType": ".pdf"
         }
     ],
     "scanPatterns": [

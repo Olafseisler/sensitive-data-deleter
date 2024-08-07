@@ -11,20 +11,27 @@ set(CMAKE_AUTOUIC ON)
 
 set(PROJECT "SensitiveDataDeleter")
 
-find_package(Qt6 COMPONENTS
-        Core
-        Gui
-        Widgets
-        REQUIRED)
+find_package(Qt6 6.7.2 COMPONENTS Core Widgets Gui REQUIRED)
 
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(POPPLER_CPP REQUIRED IMPORTED_TARGET poppler-cpp)
 
-add_executable(${PROJECT} src/main.cpp ${QT_RESOURCES} src/mainwindow.cpp src/mainwindow.h src/mainwindow.ui src/configmanager.cpp src/configmanager.h
+add_executable(${PROJECT} src/main.cpp ${QT_RESOURCES}
+        src/mainwindow.cpp
+        src/mainwindow.h
+        src/mainwindow.ui
+        src/configmanager.cpp
+        src/configmanager.h
         src/filescanner.cpp
-        src/filescanner.h)
+        src/filescanner.h
+        src/chunkreader.cpp
+        src/chunkreader.h)
+
 target_link_libraries(${PROJECT}
         Qt::Core
         Qt::Gui
         Qt::Widgets
+        PkgConfig::POPPLER_CPP
         )
 
 

@@ -9,19 +9,14 @@
 #include <QMimeDatabase>
 #include <random>
 #include <iostream>
+#include <QFileInfo>
 
 #include "filescanner.h"
+#include "chunkreader.h"
 
 #define CHUNK_SIZE 4096
 #define MAX_NUM_MATCHES 100
 
-FileScanner::FileScanner() {
-
-}
-
-FileScanner::~FileScanner() {
-    // Destructor
-}
 
 void
 FileScanner::scanFiles(QPromise<std::map<std::string, std::pair<ScanResult, std::vector<MatchInfo>>>> &promise,
@@ -41,12 +36,7 @@ FileScanner::scanFiles(QPromise<std::map<std::string, std::pair<ScanResult, std:
         }
         promise.setProgressValue(static_cast<int>((100 * i) / filePaths.size()));
 
-        // If the file is not a text file based on MIME type, skip the file
-        QMimeType mimeType = QMimeDatabase().mimeTypeForFile(QString::fromStdString(filePath));
-        if (!mimeType.inherits("text/plain")) {
-            matches[filePath] = std::make_pair(ScanResult::UNSUPPORTED_TYPE, std::vector<MatchInfo>());
-            continue;
-        }
+
 
         std::pair<ScanResult, std::vector<MatchInfo>> fileMatches = scanFileForSensitiveData(filePath, patterns);
         matches[filePath] = fileMatches;
@@ -60,55 +50,59 @@ FileScanner::scanFiles(QPromise<std::map<std::string, std::pair<ScanResult, std:
 
 std::pair<ScanResult, std::vector<MatchInfo>>
 FileScanner::scanFileForSensitiveData(const std::filesystem::path &filePath, const std::map<std::string, std::string> &patterns) {
-    std::ifstream file(filePath, std::ios::binary);
-    if (!file.is_open()) {
-        return std::make_pair(ScanResult::READ_PERMS_FAIL, std::vector<MatchInfo>());
+    QFileInfo fileInfo(QString::fromStdString(filePath));
+    if (!fileInfo.isReadable()) {
+        return std::make_pair(ScanResult::UNREADABLE, std::vector<MatchInfo>());
     }
 
-    // Check for write permissions
+    // If the file is not a text file based on MIME type, skip the file
+    QMimeType mimeType = QMimeDatabase().mimeTypeForFile(QString::fromStdString(filePath));
+    if (!mimeType.inherits("text/plain")) {
+        return std::make_pair(ScanResult::UNSUPPORTED_TYPE, std::vector<MatchInfo>());
+    }
+
     auto returnPair = std::make_pair(ScanResult::CLEAN, std::vector<MatchInfo>());
-    std::ofstream testWrite(filePath, std::ios::app);
-    if (!testWrite.is_open()) {
-        returnPair.first = ScanResult::WRITE_PERMS_FAIL;
-        testWrite.close();
-    }
 
-    char buffer[CHUNK_SIZE];
-    while (file) {
-        // Read file in chunks
-        file.read(buffer, CHUNK_SIZE);
-        std::streamsize bytesRead = file.gcount();
-        if (bytesRead <= 0) {
+    auto chunkReader = ChunkReaderFactory::createReader(filePath);
+
+    while (true) {
+        char buffer[CHUNK_SIZE];
+        size_t numBytesRead = chunkReader->readChunkFromFile(buffer, CHUNK_SIZE);
+        if (numBytesRead == 0) {
             break;
         }
 
-        std::string chunk(buffer, bytesRead);
-        for (const auto &pattern: patterns) {
-            std::regex regex(pattern.first);
-            std::smatch match;
-            auto searchStart = chunk.cbegin();
-            while (std::regex_search(searchStart, chunk.cend(), match, regex)) {
-                // Sensitive data found
-                returnPair.first = ScanResult::FLAGGED;
-                MatchInfo matchInfo;
-                matchInfo.patternUsed = std::make_pair(pattern.first, pattern.second);
-                matchInfo.match = match.str();
-                matchInfo.startIndex = match.position() + std::distance(chunk.cbegin(), searchStart);
-                matchInfo.endIndex = matchInfo.startIndex + match.length();
-                returnPair.second.push_back(matchInfo);
-
-                if (returnPair.second.size() > MAX_NUM_MATCHES) {
-                    file.close();
-                    return returnPair;
-                }
-
-                searchStart = match.suffix().first;
-            }
-        }
+        std::string chunk(buffer, numBytesRead);
+        scanChunkWithRegex(chunk, patterns, returnPair);
     }
 
-    file.close();
     return returnPair;
+}
+
+
+void FileScanner::scanChunkWithRegex(const std::string &chunk, const std::map<std::string, std::string> &patterns,
+                                     std::pair<ScanResult, std::vector<MatchInfo>> &returnPair) {
+    for (const auto &pattern: patterns) {
+        std::regex regex(pattern.first);
+        std::smatch match;
+        auto searchStart = chunk.cbegin();
+        while (std::regex_search(searchStart, chunk.cend(), match, regex)) {
+            // Sensitive data found
+            returnPair.first = ScanResult::FLAGGED;
+            MatchInfo matchInfo;
+            matchInfo.patternUsed = std::make_pair(pattern.first, pattern.second);
+            matchInfo.match = match.str();
+            matchInfo.startIndex = match.position() + std::distance(chunk.cbegin(), searchStart);
+            matchInfo.endIndex = matchInfo.startIndex + match.length();
+            returnPair.second.push_back(matchInfo);
+
+            if (returnPair.second.size() == MAX_NUM_MATCHES) {
+                return;
+            }
+
+            searchStart = match.suffix().first;
+        }
+    }
 }
 
 /**

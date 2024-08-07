@@ -17,8 +17,8 @@ enum ScanResult {
     CLEAN,
     FLAGGED,
     UNSUPPORTED_TYPE,
-    READ_PERMS_FAIL,
-    WRITE_PERMS_FAIL,
+    UNREADABLE,
+    FLAGGED_BUT_UNWRITABLE,
     DIRECTORY_TOO_DEEP,
     UNDEFINED
 };
@@ -32,18 +32,18 @@ struct MatchInfo {
 
 class FileScanner {
 public:
-    FileScanner();
+//    FileScanner() = default;
+//    ~FileScanner()= default;
 
-    ~FileScanner();
-
-    static void scanFiles(QPromise<std::map<std::string, std::pair<ScanResult, std::vector<MatchInfo>>>> &promise,
+    void scanFiles(QPromise<std::map<std::string, std::pair<ScanResult, std::vector<MatchInfo>>>> &promise,
                           const std::vector<std::string> &filePaths,
                           const std::map<std::string, std::string> &patterns,
                           const std::map<std::string, std::string> &fileTypes);
 
-    static std::pair<ScanResult, std::vector<MatchInfo>>
+    std::pair<ScanResult, std::vector<MatchInfo>>
     scanFileForSensitiveData(const std::filesystem::path &filePath, const std::map<std::string, std::string> &patterns);
-
+    void scanChunkWithRegex(const std::string &chunk, const std::map<std::string, std::string> &patterns,
+                       std::pair<ScanResult, std::vector<MatchInfo>> &returnPair);
     void deleteFiles(std::vector<std::string> &filePaths);
 
     void scrambleFile(const std::string &filePath);

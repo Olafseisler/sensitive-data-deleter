@@ -68,7 +68,7 @@ private:
     ConfigManager *configManager;
     QTreeWidgetItem *myRootItem;
     QFileSystemWatcher *watcher;
-    FileScanner *fileScanner;
+    FileScanner fileScanner;
     bool allFlaggedSelected = false;
     bool maxDepthReached = false;
     QString lastUpdatedPath = "";
