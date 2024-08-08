@@ -57,6 +57,8 @@ private slots:
 
     void on_startConfigButton_clicked();
 
+    void on_flaggedSearchBox_textEdited(const QString &newText);
+
 private:
     QTreeWidget *fileTreeWidget;
     QTreeWidget *flaggedFilesTreeWidget;
@@ -65,6 +67,10 @@ private:
     QDateEdit *fromDateEdit;
     QDateEdit *toDateEdit;
     QMap<QString, QTreeWidgetItem *> pathsToScan;
+
+    QMap<std::string, QTreeWidgetItem *> flaggedItems;
+    QMap<std::string, std::pair<ScanResult, std::vector<MatchInfo>>> flaggedFilesMatches;
+
     ConfigManager *configManager;
     QTreeWidgetItem *myRootItem;
     QFileSystemWatcher *watcher;
@@ -72,7 +78,6 @@ private:
     bool allFlaggedSelected = false;
     bool maxDepthReached = false;
     QString lastUpdatedPath = "";
-    QMap<std::string, QTreeWidgetItem *> flaggedItems;
     QFileIconProvider iconProvider = QFileIconProvider();
     Ui::MainWindow *ui;
 
@@ -97,7 +102,7 @@ private:
 
     QDialog *createInfoDialog(const QString &title, const QString &labelText);
 
-    void processScanResults(std::map<std::string, std::pair<ScanResult, std::vector<MatchInfo>>> matches,
+    void processScanResults(const std::map<std::string, std::pair<ScanResult, std::vector<MatchInfo>>>& matches,
                             QProgressDialog *progressDialog);
 
     void setRowBackgroundColor(QTreeWidgetItem *item, const QColor &color, int columnCount);

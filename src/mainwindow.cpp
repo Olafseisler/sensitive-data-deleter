@@ -7,6 +7,7 @@
 #include <QtConcurrent/QtConcurrentRun>
 #include <QProgressDialog>
 #include <QFileIconProvider>
+#include <QMessageBox>
 
 #define MAX_DEPTH 10
 
@@ -74,6 +75,7 @@ void MainWindow::updateConfigPresentation() {
             // Add a button to the column to the right to remove the row
             auto *removeButton = new QPushButton("Remove");
             fileTypesTableWidget->setCellWidget(row, 3, removeButton);
+            fileTypesTableWidget->setHorizontalHeaderItem(3, new QTableWidgetItem(""));
 
             // Connect the button to the slot to remove the row
             connect(removeButton, &QPushButton::clicked, this, [this, row]() {
@@ -520,6 +522,7 @@ void MainWindow::on_addFileButton_clicked() {
     }
 
     myRootItem->setExpanded(true);
+    fileTreeWidget->resizeColumnToContents(1);
 }
 
 void MainWindow::removeItemFromTree(QTreeWidgetItem *item) {
@@ -623,7 +626,7 @@ MainWindow::handleFlaggedScanItem(const std::pair<std::string, std::pair<ScanRes
             break;
         case ScanResult::UNREADABLE:
             setRowBackgroundColor(scanTreeItem, QColor(255, 0, 0, 50), columnCount);
-            scanTreeItem->setToolTip(0, "Could not read file due to permissions");
+            scanTreeItem->setToolTip(0, "Could not read file likely due to permissions");
             scanResultBits = scanResultBits | 0b00010000;
             break;
         case ScanResult::FLAGGED_BUT_UNWRITABLE:
@@ -670,8 +673,9 @@ QString getWarningMessage(uint8_t scanResultBits) {
     return warningMessage;
 }
 
-void MainWindow::processScanResults(std::map<std::string, std::pair<ScanResult, std::vector<MatchInfo>>> matches,
+void MainWindow::processScanResults(const std::map<std::string, std::pair<ScanResult, std::vector<MatchInfo>>> &matches,
                                     QProgressDialog *progressDialog) {
+
     uint8_t scanResultBits = 0;
     for (const auto &match: matches) {
         handleFlaggedScanItem(match, scanResultBits);
@@ -733,6 +737,7 @@ void MainWindow::processScanResults(std::map<std::string, std::pair<ScanResult, 
         }
 
         flaggedItems[match.first] = item;
+        flaggedFilesMatches[match.first] = match.second;
     }
     progressDialog->setLabelText("Done." + getWarningMessage(scanResultBits));
     qDebug() << "Asynchronous task completed. Results processed.";
@@ -780,19 +785,15 @@ void MainWindow::on_scanButton_clicked() {
     if (filePaths.empty()) {
         qDebug() << "No files to scan.";
         // Show popup for no files to scan
-        auto *noFilesDialog = new QDialog(this);
-        noFilesDialog->setWindowTitle("No files to scan");
-        auto *layout = new QVBoxLayout();
-        noFilesDialog->setLayout(layout);
-        auto *label = new QLabel("No files to scan. Please add files or folders to scan.");
-        layout->addWidget(label);
-        auto *okButton = new QPushButton("Close");
-        layout->addWidget(okButton);
-        connect(okButton, &QPushButton::clicked, noFilesDialog, &QDialog::accept);
-        noFilesDialog->exec();
+        QMessageBox::warning(this, "No files to scan",
+                             "No files to scan. Please add files or directories to scan.");
         return;
     }
     flaggedFilesTreeWidget->clear();
+    flaggedItems.clear();
+    flaggedFilesMatches.clear();
+    ui->flaggedSearchBox->clear();
+
     // Scan the files in a separate thread,
     auto *futureWatcher = new QFutureWatcher<std::map<std::string, std::pair<ScanResult, std::vector<MatchInfo>>>>(
             this);
@@ -801,7 +802,8 @@ void MainWindow::on_scanButton_clicked() {
         return;
     }
 
-    auto future = QtConcurrent::run(&FileScanner::scanFiles, &fileScanner, filePaths, checkedScanPatterns, checkedFileTypes);
+    auto future = QtConcurrent::run(&FileScanner::scanFiles, &fileScanner, filePaths, checkedScanPatterns,
+                                    checkedFileTypes);
 
     auto *progressDialog = new QProgressDialog("Scanning in progress", "Cancel", 0, 100);
     progressDialog->setAutoReset(false);
@@ -1083,7 +1085,7 @@ void MainWindow::on_newConfigButton_clicked() {
 
     QFile file(fileName);
     // If the file is empty or nonexistent
-    if (!file.exists()){
+    if (!file.exists()) {
         qDebug() << "File " << fileName << " does not exist";
         createInfoDialog("File does not exist", "The selected file does not exist or could not be found or opened.");
         return;
@@ -1098,8 +1100,7 @@ void MainWindow::on_newConfigButton_clicked() {
 /**
  * Start a new fresh config
  */
-void MainWindow::on_startConfigButton_clicked()
-{
+void MainWindow::on_startConfigButton_clicked() {
     // Open a file dialog to save the new config file
     QString fileName = QFileDialog::getSaveFileName(this, tr("Save new configuration File"),
                                                     QDir::currentPath(),
@@ -1131,5 +1132,31 @@ void MainWindow::on_startConfigButton_clicked()
     configManager->updateConfigFile();
     configManager->loadConfigFromFile(fileName);
     updateConfigPresentation();
+}
+
+
+void MainWindow::on_flaggedSearchBox_textEdited(const QString &newText) {
+    std::string newTextStdString = newText.toStdString();
+    std::transform(newTextStdString.begin(), newTextStdString.end(), newTextStdString.begin(), ::tolower);
+
+    for (const auto &key: flaggedFilesMatches.keys()) {
+        auto matchPair = flaggedFilesMatches[key];
+        for (const auto &matchItem: matchPair.second) {
+            std::string filepathString = key;
+            std::string matchString = matchItem.match;
+            std::string patternString = matchItem.patternUsed.second;
+            std::transform(filepathString.begin(), filepathString.end(), filepathString.begin(), ::tolower);
+            std::transform(matchString.begin(), matchString.end(), matchString.begin(), ::tolower);
+            std::transform(patternString.begin(), patternString.end(), patternString.begin(), ::tolower);
+            if (matchString.find(newTextStdString) != std::string::npos ||
+                patternString.find(newTextStdString) != std::string::npos ||
+                filepathString.find(newTextStdString) != std::string::npos) {
+                flaggedItems[key]->setHidden(false);
+                break;
+            } else {
+                flaggedItems[key]->setHidden(true);
+            }
+        }
+    }
 }
 

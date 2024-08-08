@@ -45,10 +45,10 @@ private:
     bool done = false;
 
 public:
-    std::queue<std::filesystem::path> queue;
+    std::vector<std::filesystem::path> queue;
     void push(const std::filesystem::path &item) {
         std::lock_guard<std::mutex> lock(mutex);
-        queue.push(item);
+        queue.push_back(item);
         cond.notify_one();
     }
 
@@ -56,8 +56,8 @@ public:
         std::unique_lock<std::mutex> lock(mutex);
         cond.wait(lock, [this] { return !queue.empty() || done; });
         if (queue.empty()) return false;
-        item = queue.front();
-        queue.pop();
+        item = queue.back();
+        queue.pop_back();
         return true;
     }
 

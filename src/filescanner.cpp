@@ -109,6 +109,10 @@ FileScanner::scanFileForSensitiveData(const std::filesystem::path &filePath,
         scanChunkWithRegex(chunk, patterns, returnPair);
     }
 
+    if (returnPair.first == ScanResult::FLAGGED && !fileInfo.isWritable()) {
+        returnPair.first = ScanResult::FLAGGED_BUT_UNWRITABLE;
+    }
+
     return returnPair;
 }
 
