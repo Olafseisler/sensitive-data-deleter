@@ -1,0 +1,12 @@
+{
+  "name": "sensitive-data-deleter",
+  "version": "0.1",
+  "dependencies": [
+    "pkgconf",
+    "qtbase",
+    {
+      "name": "poppler",
+      "default-features": false
+    }
+  ]
+}
