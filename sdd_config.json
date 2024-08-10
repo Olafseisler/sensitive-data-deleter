@@ -25,8 +25,24 @@
             "fileType": ".txt"
         },
         {
-            "description": "Portable Document Format",
+            "description": "Portable document format",
             "fileType": ".pdf"
+        },
+        {
+            "description": "MS Word document",
+            "fileType": ".docx"
+        },
+        {
+            "description": "MS PowerPoint slides",
+            "fileType": ".pptx"
+        },
+        {
+            "description": "MS Excel spreadsheet",
+            "fileType": ".xlsl"
+        },
+        {
+            "description": "Extensible markup language",
+            "fileType": ".xml"
         }
     ],
     "scanPatterns": [

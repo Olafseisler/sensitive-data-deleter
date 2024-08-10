@@ -30,7 +30,7 @@
     <item>
      <widget class="QTabWidget" name="tabWidget">
       <property name="currentIndex">
-       <number>0</number>
+       <number>1</number>
       </property>
       <widget class="QWidget" name="tab_3">
        <attribute name="title">
@@ -456,6 +456,13 @@
                     <horstretch>0</horstretch>
                     <verstretch>0</verstretch>
                    </sizepolicy>
+                  </property>
+                  <property name="date">
+                   <date>
+                    <year>1970</year>
+                    <month>1</month>
+                    <day>1</day>
+                   </date>
                   </property>
                  </widget>
                 </item>

@@ -12,7 +12,8 @@ set(CMAKE_AUTOUIC ON)
 set(PROJECT "SensitiveDataDeleter")
 
 find_package(Qt6 6.7.2 COMPONENTS Core Widgets Gui REQUIRED)
-
+find_package(minizip-ng REQUIRED)
+find_package(tinyxml2 CONFIG REQUIRED)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(POPPLER_CPP REQUIRED IMPORTED_TARGET poppler-cpp)
 
@@ -31,6 +32,8 @@ target_link_libraries(${PROJECT}
         Qt::Core
         Qt::Gui
         Qt::Widgets
+        MINIZIP::minizip-ng
+        tinyxml2::tinyxml2
         PkgConfig::POPPLER_CPP
         )
 

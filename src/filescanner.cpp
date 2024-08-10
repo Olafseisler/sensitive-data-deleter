@@ -81,7 +81,9 @@ FileScanner::scanFileForSensitiveData(const std::filesystem::path &filePath,
     }
     // If the file is not a text file based on MIME type, skip the file
     QMimeType mimeType = QMimeDatabase().mimeTypeForFile(QString::fromStdString(filePath));
-    if (!mimeType.inherits("text/plain") && !mimeType.inherits("application/pdf")) {
+    if (!mimeType.inherits("text/plain") &&
+        !mimeType.inherits("application/pdf") &&
+        !mimeType.inherits("application/zip")) {
         return std::make_pair(ScanResult::UNSUPPORTED_TYPE, std::vector<MatchInfo>());
     }
     QFileInfo fileInfo(QString::fromStdString(filePath));
@@ -93,6 +95,9 @@ FileScanner::scanFileForSensitiveData(const std::filesystem::path &filePath,
     std::unique_ptr<ChunkReader> chunkReader;
     try {
         chunkReader.reset(ChunkReaderFactory::createReader(filePath));
+        if (!chunkReader) {
+            return std::make_pair(ScanResult::UNREADABLE, std::vector<MatchInfo>());
+        }
     } catch (std::exception &e) {
         qWarning() << "Error creating ChunkReader: " << e.what() << " for file: " << filePath.string();
         return std::make_pair(ScanResult::UNREADABLE, std::vector<MatchInfo>());
@@ -103,6 +108,9 @@ FileScanner::scanFileForSensitiveData(const std::filesystem::path &filePath,
         size_t numBytesRead = chunkReader->readChunkFromFile(buffer, CHUNK_SIZE);
         if (numBytesRead == 0) {
             break;
+        }
+        else if (numBytesRead == -1) {
+            continue;
         }
 
         std::string chunk(buffer, numBytesRead);
