@@ -4,6 +4,8 @@
   "dependencies": [
     "pkgconf",
     "qtbase",
+    "minizip-ng",
+    "tinyxml2",
     {
       "name": "poppler",
       "default-features": false

@@ -410,7 +410,7 @@ void MainWindow::on_addFolderButton_clicked() {
         QObject::connect(futureWatcher, &QFutureWatcher<void>::finished, [futureWatcher, progressDialog]() {
             if (futureWatcher->future().isCanceled()) { return; }
             progressDialog->setValue(100);
-            progressDialog->setLabelText("Done.");
+            progressDialog->setLabelText("Done. ");
             progressDialog->close();
             progressDialog->deleteLater();
             futureWatcher->deleteLater();
@@ -739,7 +739,7 @@ void MainWindow::processScanResults(const std::map<std::string, std::pair<ScanRe
         flaggedItems[match.first] = item;
         flaggedFilesMatches[match.first] = match.second;
     }
-    progressDialog->setLabelText("Done." + getWarningMessage(scanResultBits));
+    progressDialog->setLabelText("Done. " + getWarningMessage(scanResultBits));
     qDebug() << "Asynchronous task completed. Results processed.";
 }
 
