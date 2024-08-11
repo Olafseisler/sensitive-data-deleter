@@ -631,7 +631,7 @@ MainWindow::handleFlaggedScanItem(const std::pair<std::string, std::pair<ScanRes
             break;
         case ScanResult::FLAGGED_BUT_UNWRITABLE:
             setRowBackgroundColor(scanTreeItem, QColor(255, 120, 0, 50), columnCount);
-            scanTreeItem->setToolTip(0, "Can not write to or delete file due to permissions. This may cause issues.");
+            scanTreeItem->setToolTip(0, "File has sensitive data but cannot be written to or deleted due to permissions. This may cause issues.");
             scanResultBits = scanResultBits | 0b00100000;
             break;
         default:
@@ -752,11 +752,11 @@ void MainWindow::on_scanButton_clicked() {
                     fileTypesTableWidget->item(i, 2)->text().toStdString();
         }
     }
-    std::map<std::string, std::string> checkedScanPatterns;
+    std::vector<std::pair<std::string, std::string>> checkedScanPatterns;
     for (int i = 0; i < scanPatternsTableWidget->rowCount(); ++i) {
         if (scanPatternsTableWidget->item(i, 0)->checkState() == Qt::Checked) {
-            checkedScanPatterns[scanPatternsTableWidget->item(i, 1)->text().toStdString()] =
-                    scanPatternsTableWidget->item(i, 2)->text().toStdString();
+            checkedScanPatterns.emplace_back(scanPatternsTableWidget->item(i, 1)->text().toStdString(),
+                                             scanPatternsTableWidget->item(i, 2)->text().toStdString());
         }
     }
 
@@ -825,20 +825,29 @@ void MainWindow::on_scanButton_clicked() {
 
     QObject::connect(futureWatcher, &QFutureWatcher<std::map<std::string, std::vector<MatchInfo>>>::finished,
                      [futureWatcher, this, originalFilePathsSize, progressDialog]() {
-                         if (futureWatcher->future().isCanceled()) { return; }
-                         progressDialog->setValue(100);
-                         progressDialog->setLabelText("Constructing results...");
-                         auto results = futureWatcher->result();  // Get the results when finished
-                         processScanResults(results, progressDialog); // Process results here
-                         futureWatcher->deleteLater();
-                         // Disconnect the "cancel button" signal
-                         progressDialog->disconnect();
-                         progressDialog->setCancelButtonText("Close");
-                         QObject::connect(progressDialog, &QProgressDialog::canceled, [progressDialog]() {
-                             progressDialog->close();
-                             progressDialog->deleteLater();
-                         });
-                         qDebug() << "Processed " << originalFilePathsSize << " files.";
+                        try {
+                            auto results = futureWatcher->result();  // Get the results when finished
+                            qDebug() << "Task returned";
+                            if (futureWatcher->future().isCanceled()) { return; }
+                            progressDialog->setValue(100);
+                            progressDialog->setLabelText("Constructing results...");
+                            processScanResults(results, progressDialog); // Process results here
+                            futureWatcher->deleteLater();
+                            // Disconnect the "cancel button" signal
+                            progressDialog->disconnect();
+                            progressDialog->setCancelButtonText("Close");
+                            QObject::connect(progressDialog, &QProgressDialog::canceled, [progressDialog]() {
+                                progressDialog->close();
+                                progressDialog->deleteLater();
+                            });
+                            qDebug() << "Processed " << originalFilePathsSize << " files.";
+                        } catch (const std::exception &e) {
+                            qDebug() << "An error occurred while processing the scan results: " << e.what();
+                            futureWatcher->deleteLater();
+                            progressDialog->close();
+                            progressDialog->deleteLater();
+                            QMessageBox::critical(this, "Error", QString::fromStdString(e.what()));
+                        }
                      });
     futureWatcher->setFuture(future);
 }

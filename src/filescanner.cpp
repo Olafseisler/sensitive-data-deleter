@@ -14,29 +14,53 @@
 #include "filescanner.h"
 #include "chunkreader.h"
 
-#define CHUNK_SIZE 64 * 1024
+#define CHUNK_SIZE (64 * 1024)
 #define MAX_NUM_MATCHES 100
-
 
 void
 FileScanner::scanFiles(QPromise<std::map<std::string, std::pair<ScanResult, std::vector<MatchInfo>>>> &promise,
                        const std::vector<std::string> &filePaths,
-                       const std::map<std::string, std::string> &patterns,
+                       const std::vector<std::pair<std::string, std::string>> &patterns,
                        const std::map<std::string, std::string> &fileTypes) {
 
+    hs_compile_error_t *compile_err;
+    flags = std::vector<unsigned int>(patterns.size(), HS_FLAG_CASELESS | HS_FLAG_UTF8 | HS_FLAG_SOM_LEFTMOST);
+    for (int i = 0; i < patterns.size(); ++i) {
+        ids.push_back(i);
+    }
+
+    for (const auto &item: patterns) {
+        scanPatterns.emplace_back(item.first.c_str());
+        scanPatternDescriptions.emplace_back(item.second.c_str());
+    }
+
+    if (hs_compile_multi(scanPatterns.data(), flags.data(), ids.data(), scanPatterns.size(), HS_MODE_BLOCK,
+                         nullptr, &database, &compile_err) != HS_SUCCESS) {
+        QString errorMessage = QString("Failed to compile patterns: %1").arg(compile_err->message);
+        hs_free_compile_error(compile_err);
+        ids.clear();
+        flags.clear();
+        scanPatterns.clear();
+        scanPatternDescriptions.clear();
+
+        promise.setException(std::make_exception_ptr(std::runtime_error(errorMessage.toStdString())));
+        promise.finish();
+        return;
+    }
 
     for (const auto &item: filePaths) {
         file_queue.push(std::filesystem::path(item));
     }
 
+    this->fileTypes = fileTypes;
 
-    // Scan files based on given patterns and file types
+    // Scan files based on given patterns and file types with multiple threads
     std::atomic<size_t> filesProcessed = 0;
     std::vector<std::thread> threads;
     uint numThreads = std::thread::hardware_concurrency();
 
     for (uint j = 0; j < numThreads; j++) {
-        threads.emplace_back(&FileScanner::scannerWorker, this, std::ref(patterns), std::ref(fileTypes),
+        threads.emplace_back(&FileScanner::scannerWorker, this,
                              std::ref(promise), std::ref(filesProcessed), filePaths.size());
     }
 
@@ -48,19 +72,28 @@ FileScanner::scanFiles(QPromise<std::map<std::string, std::pair<ScanResult, std:
 
     promise.addResult(matches);
 
-    // Empty the matches list
+    // Clear the scanner state
+    hs_free_database(database);
     matches.clear();
+    scanPatterns.clear();
+    scanPatternDescriptions.clear();
+    ids.clear();
+    flags.clear();
     promise.finish();
 }
 
-void FileScanner::scannerWorker(const std::map<std::string, std::string> &patterns,
-                                const std::map<std::string, std::string> &fileTypes,
-                                QPromise<std::map<std::string, std::pair<ScanResult, std::vector<MatchInfo>>>> &promise,
+void FileScanner::scannerWorker(QPromise<std::map<std::string, std::pair<ScanResult, std::vector<MatchInfo>>>> &promise,
                                 std::atomic<size_t> &filesProcessed,
                                 size_t totalFiles) {
+    hs_scratch_t *scratch; // Allocate separate scratch space for each thread
+    if (hs_alloc_scratch(database, &scratch) != HS_SUCCESS) {
+        qDebug() << "ERROR: Unable to allocate scratch space.";
+        return;
+    }
+
     std::filesystem::path filePath;
     while (file_queue.pop(filePath)) {
-        auto result = scanFileForSensitiveData(filePath, fileTypes, patterns);
+        auto result = scanFileForSensitiveData(filePath, scratch);
         {
             std::lock_guard<std::mutex> lock(matches_mutex);
             matches[filePath.string()] = result;
@@ -68,12 +101,12 @@ void FileScanner::scannerWorker(const std::map<std::string, std::string> &patter
         size_t processed = ++filesProcessed;
         promise.setProgressValue(static_cast<int>((processed * 100) / totalFiles));
     }
+
+    hs_free_scratch(scratch);
 }
 
 std::pair<ScanResult, std::vector<MatchInfo>>
-FileScanner::scanFileForSensitiveData(const std::filesystem::path &filePath,
-                                      const std::map<std::string, std::string> &fileTypes,
-                                      const std::map<std::string, std::string> &patterns) {
+FileScanner::scanFileForSensitiveData(const std::filesystem::path &filePath, hs_scratch_t *threadScratch) {
 
     // Check if the file extension exists in the file types map
     if (fileTypes.find(filePath.extension()) == fileTypes.end()) {
@@ -92,6 +125,12 @@ FileScanner::scanFileForSensitiveData(const std::filesystem::path &filePath,
     }
 
     auto returnPair = std::make_pair(ScanResult::CLEAN, std::vector<MatchInfo>());
+    ScanContext scanContext{
+            .returnPair = &returnPair,
+            .scanPatterns = &scanPatterns,
+            .scanPatternDescriptions = &scanPatternDescriptions,
+            .chunk = nullptr
+    };
     std::unique_ptr<ChunkReader> chunkReader;
     try {
         chunkReader.reset(ChunkReaderFactory::createReader(filePath));
@@ -105,16 +144,16 @@ FileScanner::scanFileForSensitiveData(const std::filesystem::path &filePath,
 
     while (true) {
         char buffer[CHUNK_SIZE];
+        scanContext.chunk = buffer;
         size_t numBytesRead = chunkReader->readChunkFromFile(buffer, CHUNK_SIZE);
         if (numBytesRead == 0) {
             break;
-        }
-        else if (numBytesRead == -1) {
+        } else if (numBytesRead == -1) {
             continue;
         }
 
         std::string chunk(buffer, numBytesRead);
-        scanChunkWithRegex(chunk, patterns, returnPair);
+        scanChunkWithRegex(chunk, scanContext, threadScratch);
     }
 
     if (returnPair.first == ScanResult::FLAGGED && !fileInfo.isWritable()) {
@@ -124,29 +163,29 @@ FileScanner::scanFileForSensitiveData(const std::filesystem::path &filePath,
     return returnPair;
 }
 
+int FileScanner::eventHandler(uint32_t id, uint64_t from, uint64_t to, uint32_t flags,
+                              void *context) {
+    auto *scanContext = static_cast<ScanContext *>(context);
 
-void FileScanner::scanChunkWithRegex(const std::string &chunk, const std::map<std::string, std::string> &patterns,
-                                     std::pair<ScanResult, std::vector<MatchInfo>> &returnPair) {
-    for (const auto &pattern: patterns) {
-        std::regex regex(pattern.first);
-        std::smatch match;
-        auto searchStart = chunk.cbegin();
-        while (std::regex_search(searchStart, chunk.cend(), match, regex)) {
-            // Sensitive data found
-            returnPair.first = ScanResult::FLAGGED;
-            MatchInfo matchInfo;
-            matchInfo.patternUsed = std::make_pair(pattern.first, pattern.second);
-            matchInfo.match = match.str();
-            matchInfo.startIndex = match.position() + std::distance(chunk.cbegin(), searchStart);
-            matchInfo.endIndex = matchInfo.startIndex + match.length();
-            returnPair.second.push_back(matchInfo);
+    scanContext->returnPair->first = ScanResult::FLAGGED;
+    scanContext->returnPair->second.emplace_back(
+            MatchInfo{
+                    .patternUsed = std::make_pair(scanContext->scanPatterns->at(id),
+                                                  scanContext->scanPatternDescriptions->at(id)),
+                    .match = std::string(scanContext->chunk + from, to - from),
+                    .startIndex = from,
+                    .endIndex = to
+            });
 
-            if (returnPair.second.size() == MAX_NUM_MATCHES) {
-                return;
-            }
+    return 0;
+}
 
-            searchStart = match.suffix().first;
-        }
+void FileScanner::scanChunkWithRegex(const std::string &chunk,
+                                     ScanContext &scanContext, hs_scratch_t *scratch) {
+    if (hs_scan(database, chunk.c_str(), chunk.size(), 0, scratch, &eventHandler, &scanContext) != HS_SUCCESS) {
+        std::cerr << "ERROR: Unable to scan input buffer." << std::endl;
+        hs_free_scratch(scratch);
+        hs_free_database(database);
     }
 }
 
