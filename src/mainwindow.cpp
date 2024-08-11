@@ -327,7 +327,6 @@ QTreeWidgetItem *MainWindow::findItemForPath(QTreeWidget *treeWidget, const QStr
 void MainWindow::constructScanTreeViewRecursively(QTreeWidgetItem *parentItem, const QString &currentPath,
                                                   int depth, bool useShortName) {
     if (depth > MAX_DEPTH) {
-        qWarning() << "Max depth reached. Cannot scan further than " << MAX_DEPTH << " levels deep";
         return;
     }
 
@@ -452,8 +451,7 @@ void MainWindow::on_addFolderButton_clicked() {
     }
 
     myRootItem->setExpanded(true);
-    for (int i = 0; i < myRootItem->columnCount(); ++i)
-        myRootItem->treeWidget()->resizeColumnToContents(i);
+    fileTreeWidget->resizeColumnToContents(1);
 }
 
 QString formatFileSize(qint64 size) {
@@ -631,7 +629,8 @@ MainWindow::handleFlaggedScanItem(const std::pair<std::string, std::pair<ScanRes
             break;
         case ScanResult::FLAGGED_BUT_UNWRITABLE:
             setRowBackgroundColor(scanTreeItem, QColor(255, 120, 0, 50), columnCount);
-            scanTreeItem->setToolTip(0, "File has sensitive data but cannot be written to or deleted due to permissions. This may cause issues.");
+            scanTreeItem->setToolTip(0,
+                                     "File has sensitive data but cannot be written to or deleted due to permissions. This may cause issues.");
             scanResultBits = scanResultBits | 0b00100000;
             break;
         default:
@@ -825,29 +824,30 @@ void MainWindow::on_scanButton_clicked() {
 
     QObject::connect(futureWatcher, &QFutureWatcher<std::map<std::string, std::vector<MatchInfo>>>::finished,
                      [futureWatcher, this, originalFilePathsSize, progressDialog]() {
-                        try {
-                            auto results = futureWatcher->result();  // Get the results when finished
-                            qDebug() << "Task returned";
-                            if (futureWatcher->future().isCanceled()) { return; }
-                            progressDialog->setValue(100);
-                            progressDialog->setLabelText("Constructing results...");
-                            processScanResults(results, progressDialog); // Process results here
-                            futureWatcher->deleteLater();
-                            // Disconnect the "cancel button" signal
-                            progressDialog->disconnect();
-                            progressDialog->setCancelButtonText("Close");
-                            QObject::connect(progressDialog, &QProgressDialog::canceled, [progressDialog]() {
-                                progressDialog->close();
-                                progressDialog->deleteLater();
-                            });
-                            qDebug() << "Processed " << originalFilePathsSize << " files.";
-                        } catch (const std::exception &e) {
-                            qDebug() << "An error occurred while processing the scan results: " << e.what();
-                            futureWatcher->deleteLater();
-                            progressDialog->close();
-                            progressDialog->deleteLater();
-                            QMessageBox::critical(this, "Error", QString::fromStdString(e.what()));
-                        }
+                         try {
+                             auto results = futureWatcher->result();  // Get the results when finished
+                             qDebug() << "Scan task returned";
+                             if (futureWatcher->future().isCanceled()) { return; }
+                             progressDialog->setValue(100);
+                             progressDialog->setLabelText("Constructing results...");
+                             processScanResults(results, progressDialog);
+
+                             futureWatcher->deleteLater();
+                             // Disconnect the "cancel button" signal and connect the close button
+                             progressDialog->disconnect();
+                             progressDialog->setCancelButtonText("Close");
+                             QObject::connect(progressDialog, &QProgressDialog::canceled, [progressDialog]() {
+                                 progressDialog->close();
+                                 progressDialog->deleteLater();
+                             });
+                             qDebug() << "Processed " << originalFilePathsSize << " files.";
+                         } catch (const std::exception &e) {
+                             qDebug() << "An error occurred while processing the scan results: " << e.what();
+                             futureWatcher->deleteLater();
+                             progressDialog->close();
+                             progressDialog->deleteLater();
+                             QMessageBox::critical(this, "Error", QString::fromStdString(e.what()));
+                         }
                      });
     futureWatcher->setFuture(future);
 }
