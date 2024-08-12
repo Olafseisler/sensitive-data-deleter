@@ -15,7 +15,8 @@
 #include "chunkreader.h"
 
 #define CHUNK_SIZE (64 * 1024)
-#define MAX_NUM_MATCHES 100
+#define MAX_NUM_MATCHES 100 // Max number of matches per file that will be stored
+#define BATCH_SIZE 10
 
 void
 FileScanner::scanFiles(QPromise<std::map<std::string, std::pair<ScanResult, std::vector<MatchInfo>>>> &promise,
@@ -97,6 +98,10 @@ void FileScanner::scannerWorker(QPromise<std::map<std::string, std::pair<ScanRes
         {
             std::lock_guard<std::mutex> lock(matches_mutex);
             matches[filePath.string()] = result;
+            if (matches.size() % BATCH_SIZE == 0) {
+                emit scanResultsBatchReady(matches);
+                matches.clear();
+            }
         }
         size_t processed = ++filesProcessed;
         promise.setProgressValue(static_cast<int>((processed * 100) / totalFiles));
@@ -152,8 +157,8 @@ FileScanner::scanFileForSensitiveData(const std::filesystem::path &filePath, hs_
             continue;
         }
 
-        std::string chunk(buffer, numBytesRead);
-        scanChunkWithRegex(chunk, scanContext, threadScratch);
+
+        scanChunkWithRegex(buffer, scanContext, threadScratch);
     }
 
     if (returnPair.first == ScanResult::FLAGGED && !fileInfo.isWritable()) {
@@ -180,9 +185,9 @@ int FileScanner::eventHandler(uint32_t id, uint64_t from, uint64_t to, uint32_t 
     return 0;
 }
 
-void FileScanner::scanChunkWithRegex(const std::string &chunk,
+void FileScanner::scanChunkWithRegex(const char *chunk,
                                      ScanContext &scanContext, hs_scratch_t *scratch) {
-    if (hs_scan(database, chunk.c_str(), chunk.size(), 0, scratch, &eventHandler, &scanContext) != HS_SUCCESS) {
+    if (hs_scan(database, chunk, CHUNK_SIZE, 0, scratch, &eventHandler, &scanContext) != HS_SUCCESS) {
         std::cerr << "ERROR: Unable to scan input buffer." << std::endl;
         hs_free_scratch(scratch);
         hs_free_database(database);

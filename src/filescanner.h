@@ -11,6 +11,7 @@
 #include <map>
 #include <utility>
 #include <QPromise>
+#include <QMetaObject>
 #include <filesystem>
 #include <queue>
 #include <functional>
@@ -21,6 +22,7 @@
 #include <algorithm>
 #include <thread>
 #include <hs/hs.h>
+#include <QObject>
 
 enum ScanResult {
     UNDEFINED,
@@ -54,6 +56,7 @@ private:
 
 public:
     std::vector<std::filesystem::path> queue;
+
     void push(const std::filesystem::path &item) {
         std::lock_guard<std::mutex> lock(mutex);
         queue.push_back(item);
@@ -74,29 +77,31 @@ public:
         done = true;
         cond.notify_all();
     }
+
 };
 
-class FileScanner {
-public:
-//    FileScanner() = default;
-//    ~FileScanner()= default;
+class FileScanner : public QObject {
+    Q_OBJECT
 
+public:
     void scanFiles(QPromise<std::map<std::string, std::pair<ScanResult, std::vector<MatchInfo>>>> &promise,
-                          const std::vector<std::string> &filePaths,
-                          const std::vector<std::pair<std::string, std::string>> &patterns,
-                          const std::map<std::string, std::string> &fileTypes);
+                   const std::vector<std::string> &filePaths,
+                   const std::vector<std::pair<std::string, std::string>> &patterns,
+                   const std::map<std::string, std::string> &fileTypes);
 
     void scannerWorker(QPromise<std::map<std::string, std::pair<ScanResult, std::vector<MatchInfo>>>> &promise,
-                  std::atomic<size_t> &filesProcessed,
-                  size_t totalFiles);
+                       std::atomic<size_t> &filesProcessed,
+                       size_t totalFiles);
 
     std::pair<ScanResult, std::vector<MatchInfo>>
     scanFileForSensitiveData(const std::filesystem::path &filePath, hs_scratch_t *threadScratch);
+
     static int eventHandler(uint32_t id, uint64_t from, uint64_t to, uint32_t flags,
                             void *context);
 
-    void scanChunkWithRegex(const std::string &chunk,
+    void scanChunkWithRegex(const char *chunk,
                             ScanContext &scanContext, hs_scratch_t *scratch);
+
     void deleteFiles(std::vector<std::string> &filePaths);
 
     void scrambleFile(const std::string &filePath);
@@ -112,6 +117,9 @@ private:
     hs_database_t *database = nullptr;
     std::vector<uint32_t> flags;
     std::vector<uint32_t> ids;
+
+signals:
+    void scanResultsBatchReady(std::map<std::string, std::pair<ScanResult, std::vector<MatchInfo>>> matches);
 };
 
 

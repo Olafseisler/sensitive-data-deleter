@@ -20,6 +20,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
     ui->setupUi(this);
     configManager = new ConfigManager();
     watcher = new QFileSystemWatcher(this);
+    fileScanner = new FileScanner();
     setupUI();
 }
 
@@ -27,6 +28,7 @@ MainWindow::~MainWindow() {
     delete ui;
     delete configManager;
     delete watcher;
+    delete fileScanner;
 }
 
 void MainWindow::setupUI() {
@@ -74,6 +76,7 @@ void MainWindow::setupUI() {
         }
     });
 
+    connect(fileScanner, &FileScanner::scanResultsBatchReady, this, &MainWindow::processScanResults);
     flaggedFilesTreeWidget->setHeaderLabel("Flagged Files");
     fileTreeWidget->setHeaderLabel("Files and Folders");
 
@@ -168,37 +171,37 @@ void MainWindow::updateConfigPresentation() {
     fileTypesTableWidget->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Stretch);
 
     QList<QPair<QString, QString>> scanPatterns = configManager->scanPatterns;
-            foreach (const auto &scanPattern, scanPatterns) {
-            int row = scanPatternsTableWidget->rowCount();
-            scanPatternsTableWidget->insertRow(row);
+    for (const auto &scanPattern: scanPatterns) {
+        int row = scanPatternsTableWidget->rowCount();
+        scanPatternsTableWidget->insertRow(row);
 
-            auto *checkBox = new QTableWidgetItem();
-            checkBox->setCheckState(Qt::Checked);
-            scanPatternsTableWidget->setItem(row, 0, checkBox);
-            scanPatternsTableWidget->setItem(row, 1, new QTableWidgetItem(scanPattern.first));
-            scanPatternsTableWidget->setItem(row, 2, new QTableWidgetItem(scanPattern.second));
+        auto *checkBox = new QTableWidgetItem();
+        checkBox->setCheckState(Qt::Checked);
+        scanPatternsTableWidget->setItem(row, 0, checkBox);
+        scanPatternsTableWidget->setItem(row, 1, new QTableWidgetItem(scanPattern.first));
+        scanPatternsTableWidget->setItem(row, 2, new QTableWidgetItem(scanPattern.second));
 
-            // Set title for 4th column
-            scanPatternsTableWidget->setHorizontalHeaderItem(3, new QTableWidgetItem(""));
+        // Set title for 4th column
+        scanPatternsTableWidget->setHorizontalHeaderItem(3, new QTableWidgetItem(""));
 
-            // Add a button to the column to the right to remove the row
-            auto *removeButton = new QPushButton("Remove");
-            scanPatternsTableWidget->setCellWidget(row, 3, removeButton);
+        // Add a button to the column to the right to remove the row
+        auto *removeButton = new QPushButton("Remove");
+        scanPatternsTableWidget->setCellWidget(row, 3, removeButton);
 
-            // Connect the button to the slot to remove the row
-            connect(removeButton, &QPushButton::clicked, this, [this, row]() {
-                auto *confirmationDialog = createConfirmationDialog("Remove Scan Pattern",
-                                                                    "Are you sure you want to remove this scan pattern?",
-                                                                    "Remove");
-                if (confirmationDialog->result() == QDialog::Rejected) {
-                    return;
-                }
+        // Connect the button to the slot to remove the row
+        connect(removeButton, &QPushButton::clicked, this, [this, row]() {
+            auto *confirmationDialog = createConfirmationDialog("Remove Scan Pattern",
+                                                                "Are you sure you want to remove this scan pattern?",
+                                                                "Remove");
+            if (confirmationDialog->result() == QDialog::Rejected) {
+                return;
+            }
 
-                auto patternToRemove = this->scanPatternsTableWidget->item(row, 1)->text();
-                this->scanPatternsTableWidget->removeRow(row);
-                this->configManager->removeScanPattern(patternToRemove);
-            });
-        }
+            auto patternToRemove = this->scanPatternsTableWidget->item(row, 1)->text();
+            this->scanPatternsTableWidget->removeRow(row);
+            this->configManager->removeScanPattern(patternToRemove);
+        });
+    }
 
     scanPatternsTableWidget->horizontalHeader()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
     scanPatternsTableWidget->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
@@ -293,12 +296,12 @@ void MainWindow::onDirectoryChanged(const QString &path) {
 
 void MainWindow::updateTreeItem(QTreeWidgetItem *item, const QString &path) {
     QDir dir(path);
-
     if (!dir.exists() && item != myRootItem) {
         // Remove the item from the tree if it no longer exists
         removeItemFromTree(item);
         return;
     }
+
     // Clear the existing subtree items
     int childToRemoveIndex = item->childCount() - 1;
     while (childToRemoveIndex >= 0) {
@@ -654,8 +657,7 @@ void MainWindow::setRowBackgroundColor(QTreeWidgetItem *item, const QColor &colo
     }
 }
 
-void getScanResultBits(const std::pair<std::string, std::pair<ScanResult, std::vector<MatchInfo>>> &match,
-                       uint8_t &scanResultBits) {
+void MainWindow::getScanResultBits(const std::pair<std::string, std::pair<ScanResult, std::vector<MatchInfo>>> &match) {
     switch (match.second.first) {
         case ScanResult::CLEAN:
             scanResultBits = scanResultBits | 0b00000001;
@@ -705,13 +707,11 @@ QString getWarningMessage(uint8_t scanResultBits) {
 }
 
 void
-MainWindow::processScanResults(const std::map<std::string, std::pair<ScanResult, std::vector<MatchInfo>>> &results,
-                               QProgressDialog *progressDialog) {
-    uint8_t scanResultBits = 0;
+MainWindow::processScanResults(const std::map<std::string, std::pair<ScanResult, std::vector<MatchInfo>>> &results) {
     for (const auto &result: results) {
         scanResults[result.first] = result.second;
         QString qstringPath = QString::fromStdString(result.first);
-
+        getScanResultBits(result);
         // If the item at given path does not exist, expand to it and it will be created
         if (!pathsToScan.value(qstringPath)) {
             if (result.second.first != ScanResult::CLEAN &&
@@ -721,8 +721,6 @@ MainWindow::processScanResults(const std::map<std::string, std::pair<ScanResult,
         } else {
             handleFlaggedScanItem(result.first);
         }
-
-        getScanResultBits(result, scanResultBits);
 
         if (result.second.second.empty()) {
             continue;
@@ -781,9 +779,6 @@ MainWindow::processScanResults(const std::map<std::string, std::pair<ScanResult,
             childLabel->setFont(childFont);
         }
     }
-
-    progressDialog->setLabelText("Done. " + getWarningMessage(scanResultBits));
-    qDebug() << "Asynchronous task completed. Results processed.";
 }
 
 void MainWindow::on_scanButton_clicked() {
@@ -835,6 +830,7 @@ void MainWindow::on_scanButton_clicked() {
     flaggedItems.clear();
     scanResults.clear();
     ui->flaggedSearchBox->clear();
+    scanResultBits = 0;
 
     // Scan the files in a separate thread,
     auto *futureWatcher = new QFutureWatcher<std::map<std::string, std::pair<ScanResult, std::vector<MatchInfo>>>>(
@@ -844,7 +840,7 @@ void MainWindow::on_scanButton_clicked() {
         return;
     }
 
-    auto future = QtConcurrent::run(&FileScanner::scanFiles, &fileScanner, filePaths, checkedScanPatterns,
+    auto future = QtConcurrent::run(&FileScanner::scanFiles, fileScanner, filePaths, checkedScanPatterns,
                                     checkedFileTypes);
 
     auto *progressDialog = new QProgressDialog("Scanning in progress", "Cancel", 0, 100);
@@ -873,7 +869,10 @@ void MainWindow::on_scanButton_clicked() {
                              if (futureWatcher->future().isCanceled()) { return; }
                              progressDialog->setValue(100);
                              progressDialog->setLabelText("Constructing results...");
-                             processScanResults(results, progressDialog);
+                             processScanResults(results);
+
+                             progressDialog->setLabelText("Done. " + getWarningMessage(scanResultBits));
+
 
                              futureWatcher->deleteLater();
                              // Disconnect the "cancel button" signal and connect the close button
@@ -1005,7 +1004,7 @@ void MainWindow::on_deleteButton_clicked() {
 
     QList<std::string> flaggedItemsToRemove = flaggedItems.keys();
     std::vector<std::string> flaggedItemsToRemoveVector(flaggedItemsToRemove.begin(), flaggedItemsToRemove.end());
-    fileScanner.deleteFiles(flaggedItemsToRemoveVector);
+    fileScanner->deleteFiles(flaggedItemsToRemoveVector);
 
     // Remove all flagged files
     while (!flaggedItems.empty()) {
