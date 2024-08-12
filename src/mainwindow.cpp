@@ -88,37 +88,37 @@ void MainWindow::updateConfigPresentation() {
     scanPatternsTableWidget->setRowCount(0);
 
     QList<QPair<QString, QString>> fileTypes = configManager->fileTypes;
-            foreach (const auto &fileType, fileTypes) {
-            int row = fileTypesTableWidget->rowCount();
-            fileTypesTableWidget->insertRow(row);
+    for (const auto &fileType: fileTypes) {
+        int row = fileTypesTableWidget->rowCount();
+        fileTypesTableWidget->insertRow(row);
 
-            auto *checkBox = new QTableWidgetItem();
-            checkBox->setCheckState(Qt::Checked);
-            fileTypesTableWidget->setItem(row, 0, checkBox);
-            fileTypesTableWidget->setItem(row, 1, new QTableWidgetItem(fileType.first));
-            fileTypesTableWidget->setItem(row, 2, new QTableWidgetItem(fileType.second));
+        auto *checkBox = new QTableWidgetItem();
+        checkBox->setCheckState(Qt::Checked);
+        fileTypesTableWidget->setItem(row, 0, checkBox);
+        fileTypesTableWidget->setItem(row, 1, new QTableWidgetItem(fileType.first));
+        fileTypesTableWidget->setItem(row, 2, new QTableWidgetItem(fileType.second));
 
-            // Add a button to the column to the right to remove the row
-            auto *removeButton = new QPushButton("Remove");
-            fileTypesTableWidget->setCellWidget(row, 3, removeButton);
-            fileTypesTableWidget->setHorizontalHeaderItem(3, new QTableWidgetItem(""));
+        // Add a button to the column to the right to remove the row
+        auto *removeButton = new QPushButton("Remove");
+        fileTypesTableWidget->setCellWidget(row, 3, removeButton);
+        fileTypesTableWidget->setHorizontalHeaderItem(3, new QTableWidgetItem(""));
 
-            // Connect the button to the slot to remove the row
-            connect(removeButton, &QPushButton::clicked, this, [this, row]() {
-                auto *confirmationDialog = createConfirmationDialog("Remove File Type",
-                                                                    "Are you sure you want to remove the file type for " +
-                                                                    this->fileTypesTableWidget->item(row, 2)->text() +
-                                                                    "?",
-                                                                    "Remove");
-                if (confirmationDialog->result() == QDialog::Rejected) {
-                    return;
-                }
+        // Connect the button to the slot to remove the row
+        connect(removeButton, &QPushButton::clicked, this, [this, row]() {
+            auto *confirmationDialog = createConfirmationDialog("Remove File Type",
+                                                                "Are you sure you want to remove the file type for " +
+                                                                this->fileTypesTableWidget->item(row, 2)->text() +
+                                                                "?",
+                                                                "Remove");
+            if (confirmationDialog->result() == QDialog::Rejected) {
+                return;
+            }
 
-                auto fileTypeToRemove = this->fileTypesTableWidget->item(row, 1)->text();
-                this->fileTypesTableWidget->removeRow(row);
-                this->configManager->removeFileType(fileTypeToRemove);
-            });
-        }
+            auto fileTypeToRemove = this->fileTypesTableWidget->item(row, 1)->text();
+            this->fileTypesTableWidget->removeRow(row);
+            this->configManager->removeFileType(fileTypeToRemove);
+        });
+    }
 
 
     // Connect the itemChanged slot for file types
@@ -299,22 +299,28 @@ void MainWindow::updateTreeItem(QTreeWidgetItem *item, const QString &path) {
         removeItemFromTree(item);
         return;
     }
-            foreach (const QString &entry,
-                     dir.entryList(QDir::NoDotAndDotDot | QDir::Files | QDir::Dirs,
-                                   QDir::SortFlags(Qt::AscendingOrder))) {
+    // Clear the existing subtree items
+    int childToRemoveIndex = item->childCount() - 1;
+    while (childToRemoveIndex >= 0) {
+        auto childItem = item->child(childToRemoveIndex);
+        removeItemFromTree(childItem);
+        childToRemoveIndex--;
+    }
 
-            QString childPath = path + "/" + entry;
-            QTreeWidgetItem *childItem = pathsToScan.value(childPath);
-            if (!childItem) {
-                childItem = createTreeItem(item, childPath, true);
-                if (QFileInfo(childPath).isDir()) {
-                    childItem->setChildIndicatorPolicy(QTreeWidgetItem::ShowIndicator);
-                }
+    for (const QString &entry: dir.entryList(QDir::NoDotAndDotDot | QDir::Files | QDir::Dirs,
+                                             QDir::SortFlags(Qt::AscendingOrder))) {
+        QString childPath = path + "/" + entry;
+        QTreeWidgetItem *childItem = pathsToScan.value(childPath);
+        if (!childItem) {
+            childItem = createTreeItem(item, childPath, true);
+            if (QFileInfo(childPath).isDir()) {
+                childItem->setChildIndicatorPolicy(QTreeWidgetItem::ShowIndicator);
             }
-
-            pathsToScan.insert(childPath, childItem);
-            handleFlaggedScanItem(childPath.toStdString());
         }
+
+        pathsToScan.insert(childPath, childItem);
+        handleFlaggedScanItem(childPath.toStdString());
+    }
     item->setCheckState(0, Qt::Unchecked);
 }
 
@@ -385,6 +391,9 @@ void MainWindow::constructScanTreeViewRecursively(QTreeWidgetItem *parentItem, c
             }
         }
 
+        if (it->is_directory()) {
+            watcher->addPath(QString::fromStdString(it->path().string()));
+        }
         pathsToScan.insert(path, nullptr);
     }
 
@@ -453,6 +462,7 @@ void MainWindow::on_addFolderButton_clicked() {
     // Create a new tree item for the directory
     constructScanTreeViewRecursively(myRootItem, dirPath);
     fileTreeWidget->resizeColumnToContents(0);
+    watcher->addPath(dirPath);
 }
 
 QString formatFileSize(qint64 size) {
@@ -544,7 +554,6 @@ void MainWindow::removeItemFromTree(QTreeWidgetItem *item) {
         childToRemoveIndex--;
     }
 
-    watcher->removePath(path);
     parent->removeChild(item);
     pathsToScan[path] = nullptr;
     delete item;
@@ -890,10 +899,9 @@ void MainWindow::on_removeSelectedButton_2_clicked() {
     // Get all checked items, only considering topmost checked items
     QList<QTreeWidgetItem *> checkedItems;
 
-    for (auto &item : pathsToScan) {
+    for (auto &item: pathsToScan) {
         if (item && item->checkState(0) == Qt::Checked) {
             bool isTopmost = true;
-
             // Check if the current item has any ancestors in the checkedItems list
             QTreeWidgetItem *parent = item->parent();
             while (parent) {
@@ -922,9 +930,13 @@ void MainWindow::on_removeSelectedButton_2_clicked() {
         QString itemPath = item->data(0, Qt::UserRole).toString();
         removeItemFromTree(item);
         pathsToScan.remove(itemPath);
+        // Set the scan result to clean
+        scanResults[itemPath.toStdString()].first = ScanResult::UNDEFINED;
+        watcher->removePath(itemPath);
         // Remove all flagged items that are children of the removed item
         for (auto iter = pathsToScan.begin(); iter != pathsToScan.end();) {
             if (iter.key().startsWith(itemPath)) {
+                scanResults[iter.key().toStdString()].first = ScanResult::UNDEFINED;
                 iter = pathsToScan.erase(iter);
             } else {
                 ++iter;
