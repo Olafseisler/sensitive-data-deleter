@@ -3,12 +3,16 @@
   "version": "0.1",
   "dependencies": [
     "pkgconf",
-    "qtbase",
     "minizip-ng",
     "tinyxml2",
     {
       "name": "poppler",
       "default-features": false
+    },
+    {
+      "name": "qtbase",
+      "default-features": false,
+        "features": ["widgets", "thread", "concurrent", "pcre2"]
     }
   ]
 }

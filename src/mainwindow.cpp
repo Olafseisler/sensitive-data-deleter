@@ -8,8 +8,12 @@
 #include <QProgressDialog>
 #include <QFileIconProvider>
 #include <QMessageBox>
+#include <filesystem>
+#include <set>
 
 #define MAX_DEPTH 10
+
+namespace fs = std::filesystem;
 
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
     ui = new Ui::MainWindow;
@@ -29,6 +33,8 @@ void MainWindow::setupUI() {
     fileTreeWidget = ui->fileTreeWidget;
     myRootItem = new QTreeWidgetItem(fileTreeWidget, QStringList("Files and Folders"));
     fileTreeWidget->insertTopLevelItem(0, myRootItem);
+    myRootItem->setExpanded(true);
+
     flaggedFilesTreeWidget = ui->flaggedFilesTreeWidget;
     fileTypesTableWidget = ui->fileTypesTableWidget;
     scanPatternsTableWidget = ui->scanPatternsTableWidget;
@@ -47,6 +53,26 @@ void MainWindow::setupUI() {
     ui->toDateEdit->setDate(currentDate);
     ui->toDateEdit->setDateTime(QDateTime(currentDate, latestTimeOnCurrentDate));
 
+    // Connect the itemExpanded signal on the fileTreeWidget to load the child elements
+    connect(fileTreeWidget, &QTreeWidget::itemExpanded, this, [this](QTreeWidgetItem *item) {
+        auto path = item->data(0, Qt::UserRole).toString();
+        if (pathsToScan.contains(path)) {
+            updateTreeItem(item, path);
+        }
+        fileTreeWidget->resizeColumnToContents(0);
+    });
+    // Connect the itemCollapsed signal on the fileTreeWidget to remove invisible children
+    connect(fileTreeWidget, &QTreeWidget::itemCollapsed, this, [this](QTreeWidgetItem *item) {
+        if (item == myRootItem) {
+            return;
+        }
+        auto childIndex = item->childCount() - 1;
+        while (childIndex >= 0) {
+            auto childItem = item->child(childIndex);
+            removeItemFromTree(childItem);
+            childIndex--;
+        }
+    });
 
     flaggedFilesTreeWidget->setHeaderLabel("Flagged Files");
     fileTreeWidget->setHeaderLabel("Files and Folders");
@@ -268,26 +294,26 @@ void MainWindow::onDirectoryChanged(const QString &path) {
 void MainWindow::updateTreeItem(QTreeWidgetItem *item, const QString &path) {
     QDir dir(path);
 
-    if (!dir.exists()) {
+    if (!dir.exists() && item != myRootItem) {
         // Remove the item from the tree if it no longer exists
         removeItemFromTree(item);
-        delete item;
         return;
     }
-
             foreach (const QString &entry,
-                     dir.entryList(QDir::NoDotAndDotDot | QDir::Files | QDir::Dirs, QDir::DirsFirst)) {
+                     dir.entryList(QDir::NoDotAndDotDot | QDir::Files | QDir::Dirs,
+                                   QDir::SortFlags(Qt::AscendingOrder))) {
 
             QString childPath = path + "/" + entry;
             QTreeWidgetItem *childItem = pathsToScan.value(childPath);
             if (!childItem) {
                 childItem = createTreeItem(item, childPath, true);
+                if (QFileInfo(childPath).isDir()) {
+                    childItem->setChildIndicatorPolicy(QTreeWidgetItem::ShowIndicator);
+                }
             }
-            if (QFileInfo(childPath).isDir()) {
-                updateTreeItem(childItem, childPath); // Recursive call for subdirectories
-//            watcher->addPath(childPath); // Add subdirectories to the watcher
-                pathsToScan.insert(childPath, childItem);
-            }
+
+            pathsToScan.insert(childPath, childItem);
+            handleFlaggedScanItem(childPath.toStdString());
         }
     item->setCheckState(0, Qt::Unchecked);
 }
@@ -323,38 +349,54 @@ QTreeWidgetItem *MainWindow::findItemForPath(QTreeWidget *treeWidget, const QStr
     return nullptr;
 }
 
+bool isSystemFile(const fs::path &path) {
+    static const std::set<std::string> ignoredFiles = {
+            ".DS_Store", "desktop.ini", "Thumbs.db"
+    };
 
-void MainWindow::constructScanTreeViewRecursively(QTreeWidgetItem *parentItem, const QString &currentPath,
-                                                  int depth, bool useShortName) {
-    if (depth > MAX_DEPTH) {
-        return;
-    }
+    // Check if the file is in the ignored list
+    return ignoredFiles.find(path.filename().string()) != ignoredFiles.end();
+}
 
-    // If a file or folder encountered already exists in the scan list,
-    // join it to the directory item and remove the original item from the tree
-    QTreeWidgetItem *existingItem = pathsToScan.value(currentPath);
-    QString shortName = currentPath.split("/").last();
-    if (existingItem) {
-        // Change name from full path to file/folder name only
-        existingItem->setText(0, shortName);
-        myRootItem->removeChild(existingItem);
-        parentItem->addChild(existingItem);
-        return;
-    }
 
-    auto *directoryItem = createTreeItem(parentItem, currentPath, useShortName);
+void MainWindow::constructScanTreeViewRecursively(QTreeWidgetItem *parentItem, const QString &currentPath) {
 
-    // Return early if the item is a file
-    if (!QFileInfo(currentPath).isDir()) {
-        return;
-    }
+    // Use std filesystem recursive iterator to add all folders and files into pathsToScan
+    for (auto it = fs::recursive_directory_iterator(currentPath.toStdString());
+         it != fs::recursive_directory_iterator(); ++it) {
 
-    QDir dir(currentPath);
-            foreach (const QString &entry,
-                     dir.entryList(QDir::NoDotAndDotDot | QDir::Files | QDir::Dirs, QDir::DirsFirst)) {
-            QString childPath = currentPath + "/" + entry;
-            constructScanTreeViewRecursively(directoryItem, childPath, depth + 1, true);
+        if (isSystemFile(it->path())) {
+            continue;
         }
+        int current_depth = it.depth();
+        if (current_depth > MAX_DEPTH) {
+            it.pop();  // Skip deeper directories
+            continue;
+        }
+
+        // If a file or folder encountered already exists in the scan list,
+        // it will be joined to the parent item and shown when parent is expanded
+        QString path = QString::fromStdString(it->path().string());
+        if (pathsToScan.contains(path)) {
+            auto *existingItem = pathsToScan.value(path);
+
+            if (existingItem) {
+                removeItemFromTree(existingItem);
+            }
+        }
+
+        pathsToScan.insert(path, nullptr);
+    }
+
+    // Only create the tree item if the path is that of the parent item
+    // and the parent item is expanded
+    if (parentItem->isExpanded()) {
+        bool useShortName = parentItem != myRootItem;
+        auto newItem = createTreeItem(parentItem, currentPath, useShortName);
+        parentItem->sortChildren(0, Qt::AscendingOrder);
+        pathsToScan[currentPath] = newItem;
+        newItem->setChildIndicatorPolicy(QTreeWidgetItem::ShowIndicator);
+    }
 }
 
 QString MainWindow::getParentPath(const QString &dirPath) {
@@ -363,7 +405,7 @@ QString MainWindow::getParentPath(const QString &dirPath) {
     while (!parentPath.isEmpty()) {
         if (pathsToScan.contains(parentPath)) {
             auto *parentItem = pathsToScan.value(parentPath);
-            return parentItem->data(0, Qt::UserRole).toString();
+            return parentPath;
         }
         auto lastIndex = parentPath.lastIndexOf("/");
         if (lastIndex == -1)
@@ -378,80 +420,39 @@ void MainWindow::on_addFolderButton_clicked() {
     QString dirPath = QFileDialog::getExistingDirectory(this, tr("Select Directory"), QDir::currentPath());
     if (dirPath.isEmpty()) {
         qDebug() << "No directory selected";
+        QMessageBox::information(this, "No directory selected", "No directory selected.");
         return;
     }
 
     if (pathsToScan.contains(dirPath)) {
         qDebug() << "Directory already being watched";
+        QMessageBox::information(this, "Directory already being watched",
+                                 "The directory is already being watched.");
         return;
     }
-
-    auto *futureWatcher = new QFutureWatcher<void>(this);
 
     // Existing parent directory, append the new directory to the parent tree
     auto parentPath = getParentPath(dirPath);
     if (!parentPath.isEmpty()) {
-        auto *parentItem = pathsToScan.value(parentPath);
 
-        QFuture<void> future = QtConcurrent::run([this, parentItem, dirPath]() {
-            constructScanTreeViewRecursively(parentItem, dirPath, 0, true);
-        });
+        // Create new tree item for the directory
+        auto parentItem = pathsToScan.value(parentPath);
+        constructScanTreeViewRecursively(parentItem, dirPath);
 
-        auto *progressDialog = new QProgressDialog("Adding directory", "Cancel", 0, 100);
-        progressDialog->setMinimumDuration(2000);
-        QObject::connect(progressDialog, &QProgressDialog::canceled, [futureWatcher, progressDialog]() {
-            futureWatcher->future().cancel();
-            progressDialog->close();
-            progressDialog->deleteLater();
-            futureWatcher->deleteLater();
-        });
+        // Uncheck all items in the tree
+        for (const auto &item: pathsToScan) {
+            if (item)
+                item->setCheckState(0, Qt::Unchecked);
+        }
 
-        QObject::connect(futureWatcher, &QFutureWatcher<void>::finished, [futureWatcher, progressDialog]() {
-            if (futureWatcher->future().isCanceled()) { return; }
-            progressDialog->setValue(100);
-            progressDialog->setLabelText("Done. ");
-            progressDialog->close();
-            progressDialog->deleteLater();
-            futureWatcher->deleteLater();
-        });
-        futureWatcher->setFuture(future);
-
+        watcher->addPath(dirPath);
+        fileTreeWidget->resizeColumnToContents(0);
         return;
     }
 
-    watcher->addPath(dirPath);
-    // Create new tree item for the directory
-    QFuture<void> future = QtConcurrent::run([this, dirPath]() {
-        constructScanTreeViewRecursively(myRootItem, dirPath);
-    });
-
-    auto *progressDialog = new QProgressDialog("Adding directory", "Cancel", 0, 0);
-    QObject::connect(progressDialog, &QProgressDialog::canceled, [futureWatcher, progressDialog]() {
-        if (futureWatcher->future().isFinished()) { return; }
-        futureWatcher->future().cancel();
-        progressDialog->close();
-        progressDialog->deleteLater();
-        futureWatcher->deleteLater();
-    });
-
-    QObject::connect(futureWatcher, &QFutureWatcher<void>::finished, [futureWatcher, progressDialog]() {
-        if (futureWatcher->future().isCanceled()) { return; }
-        progressDialog->setValue(100);
-        progressDialog->disconnect();
-        progressDialog->close();
-        progressDialog->deleteLater();
-        futureWatcher->deleteLater();
-
-    });
-    futureWatcher->setFuture(future);
-
-    // Uncheck all items in the tree
-    for (const auto &item: pathsToScan) {
-        item->setCheckState(0, Qt::Unchecked);
-    }
-
-    myRootItem->setExpanded(true);
-    fileTreeWidget->resizeColumnToContents(1);
+    // Create a new tree item for the directory
+    constructScanTreeViewRecursively(myRootItem, dirPath);
+    fileTreeWidget->resizeColumnToContents(0);
 }
 
 QString formatFileSize(qint64 size) {
@@ -475,43 +476,42 @@ QTreeWidgetItem *MainWindow::createTreeItem(QTreeWidgetItem *parentItem, const Q
     item->setText(1, "");
     // If the item is a file, set the size and last modified date
     if (!QFileInfo(path).isDir()) {
-        item->setText(1, formatFileSize(QFileInfo(path).size()));
-        item->setText(2, QFileInfo(path).lastModified().toString("dd/MM/yyyy"));
         QFileInfo fileInfo(path);
         item->setIcon(0, iconProvider.icon(fileInfo));
+        item->setText(1, formatFileSize(fileInfo.size()));
+        item->setText(2, QFileInfo(path).lastModified().toString("dd/MM/yyyy"));
     } else {
         item->setIcon(0, iconProvider.icon(QFileIconProvider::Folder));
     }
     item->setCheckState(0, Qt::Unchecked);
-    pathsToScan.insert(path, item);
-//    watcher->addPath(path);
+
     return item;
 }
 
 void MainWindow::on_addFileButton_clicked() {
-    QStringList fileNames = QFileDialog::getOpenFileNames(this, tr("Select Files"), QDir::currentPath());
-    if (fileNames.isEmpty()) {
+    QStringList filePaths = QFileDialog::getOpenFileNames(this, tr("Select Files"), QDir::currentPath());
+    if (filePaths.isEmpty()) {
         qDebug() << "No files selected";
         return;
     }
 
-    for (const auto &fileName: fileNames) {
-        QString itemPath = QFileInfo(fileName).absoluteFilePath();
-
-        if (pathsToScan.contains(itemPath)) {
-            qDebug() << "File " << itemPath << " already being watched";
+    for (const auto &filePath: filePaths) {
+        if (pathsToScan.contains(filePath)) {
+            qDebug() << "File " << filePath << " already being watched";
             continue;
         }
 
         // If a parent directory is already being watched, add the new file to the parent item
-        QString parentPath = getParentPath(itemPath);
+        QString parentPath = getParentPath(filePath);
         if (!parentPath.isEmpty()) {
             auto *parentItem = pathsToScan.value(parentPath);
-            createTreeItem(parentItem, itemPath, true);
+            if (parentItem) {
+                createTreeItem(parentItem, filePath, true);
+            }
             continue;
         }
 
-        createTreeItem(myRootItem, itemPath, false);
+        createTreeItem(myRootItem, filePath, false);
     }
 
     // Uncheck all items in the tree
@@ -537,12 +537,17 @@ void MainWindow::removeItemFromTree(QTreeWidgetItem *item) {
     auto path = itemData.toString();
 
     // Remove any children of the item
-    for (int i = 0; i < item->childCount(); ++i) {
-        removeItemFromTree(item->child(i));
+    int childToRemoveIndex = item->childCount() - 1;
+    while (childToRemoveIndex >= 0) {
+        auto childItem = item->child(childToRemoveIndex);
+        removeItemFromTree(childItem);
+        childToRemoveIndex--;
     }
 
-    pathsToScan.remove(path);
     watcher->removePath(path);
+    parent->removeChild(item);
+    pathsToScan[path] = nullptr;
+    delete item;
 }
 
 QDialog *
@@ -579,72 +584,90 @@ QDialog *MainWindow::createInfoDialog(const QString &title, const QString &label
     return dialog;
 }
 
-void expandToFlaggedItem(QTreeWidgetItem *item) {
-    QTreeWidgetItem *parent = item->parent();
-    while (parent) {
-        if (!parent->isExpanded()) {
-            parent->setExpanded(true);
+void MainWindow::expandToFlaggedItem(const QString &path) {
+    QStringList pathParts = path.split("/");
+    QString currentPath = pathParts[0];
+    int index = 1;
+    while (currentPath != path) {
+        auto *item = pathsToScan.value(currentPath);
+        if (item && !item->isExpanded()) {
+            item->setExpanded(true);
         }
-        parent = parent->parent();
+        currentPath += "/" + pathParts[index];
+        index++;
     }
+
     // Resize the columns to fit the content
-    for (int i = 0; i < item->columnCount(); ++i) {
-        item->treeWidget()->resizeColumnToContents(i);
-    }
+    fileTreeWidget->resizeColumnToContents(0);
 }
 
 void
-MainWindow::handleFlaggedScanItem(const std::pair<std::string, std::pair<ScanResult, std::vector<MatchInfo>>> &match,
-                                  uint8_t &scanResultBits) {
+MainWindow::handleFlaggedScanItem(const std::string &flaggedPath) {
     int columnCount = fileTreeWidget->columnCount();
-    auto qstringPath = QString::fromStdString(match.first);
     // Set the color of the row of the corresponding element in fileTreeWidget
-    QTreeWidgetItem *scanTreeItem = pathsToScan.value(qstringPath);
+    QTreeWidgetItem *scanTreeItem = pathsToScan.value(QString::fromStdString(flaggedPath));
 
-    switch (match.second.first) {
+    switch (scanResults.value(flaggedPath).first) {
         case ScanResult::CLEAN:
             setRowBackgroundColor(scanTreeItem, QColor(0, 255, 0, 50), columnCount);
             scanTreeItem->setToolTip(0, "No sensitive data found");
-            scanResultBits = scanResultBits | 0b00000001;
             break;
         case ScanResult::DIRECTORY_TOO_DEEP:
             setRowBackgroundColor(scanTreeItem, QColor(128, 128, 128, 50), columnCount);
             scanTreeItem->setToolTip(0, "Directory is too deep to scan");
-            scanResultBits = scanResultBits | 0b00000010;
             break;
         case ScanResult::FLAGGED:
             setRowBackgroundColor(scanTreeItem, QColor(255, 255, 0, 50), columnCount);
             scanTreeItem->setToolTip(0, "Sensitive data found");
-            scanResultBits = scanResultBits | 0b00000100;
             break;
         case ScanResult::UNSUPPORTED_TYPE:
             setRowBackgroundColor(scanTreeItem, QColor(150, 150, 150, 50), columnCount);
             scanTreeItem->setToolTip(0, "Unsupported file type");
-            scanResultBits = scanResultBits | 0b00001000;
             break;
         case ScanResult::UNREADABLE:
             setRowBackgroundColor(scanTreeItem, QColor(255, 0, 0, 50), columnCount);
             scanTreeItem->setToolTip(0, "Could not read file likely due to permissions");
-            scanResultBits = scanResultBits | 0b00010000;
             break;
         case ScanResult::FLAGGED_BUT_UNWRITABLE:
             setRowBackgroundColor(scanTreeItem, QColor(255, 120, 0, 50), columnCount);
             scanTreeItem->setToolTip(0,
                                      "File has sensitive data but cannot be written to or deleted due to permissions. This may cause issues.");
-            scanResultBits = scanResultBits | 0b00100000;
             break;
         default:
             break;
     }
-    if (match.second.first != ScanResult::CLEAN &&
-        match.second.first != ScanResult::UNSUPPORTED_TYPE) {
-        expandToFlaggedItem(scanTreeItem);
-    }
+
 }
 
 void MainWindow::setRowBackgroundColor(QTreeWidgetItem *item, const QColor &color, int columnCount) {
     for (int column = 0; column < columnCount; ++column) {
         item->setBackground(column, QBrush(color));
+    }
+}
+
+void getScanResultBits(const std::pair<std::string, std::pair<ScanResult, std::vector<MatchInfo>>> &match,
+                       uint8_t &scanResultBits) {
+    switch (match.second.first) {
+        case ScanResult::CLEAN:
+            scanResultBits = scanResultBits | 0b00000001;
+            break;
+        case ScanResult::DIRECTORY_TOO_DEEP:
+            scanResultBits = scanResultBits | 0b00000010;
+            break;
+        case ScanResult::FLAGGED:
+            scanResultBits = scanResultBits | 0b00000100;
+            break;
+        case ScanResult::UNSUPPORTED_TYPE:
+            scanResultBits = scanResultBits | 0b00001000;
+            break;
+        case ScanResult::UNREADABLE:
+            scanResultBits = scanResultBits | 0b00010000;
+            break;
+        case ScanResult::FLAGGED_BUT_UNWRITABLE:
+            scanResultBits = scanResultBits | 0b00100000;
+            break;
+        default:
+            break;
     }
 }
 
@@ -672,19 +695,32 @@ QString getWarningMessage(uint8_t scanResultBits) {
     return warningMessage;
 }
 
-void MainWindow::processScanResults(const std::map<std::string, std::pair<ScanResult, std::vector<MatchInfo>>> &matches,
-                                    QProgressDialog *progressDialog) {
-
+void
+MainWindow::processScanResults(const std::map<std::string, std::pair<ScanResult, std::vector<MatchInfo>>> &results,
+                               QProgressDialog *progressDialog) {
     uint8_t scanResultBits = 0;
-    for (const auto &match: matches) {
-        handleFlaggedScanItem(match, scanResultBits);
-        if (match.second.second.empty()) {
-            continue;
+    for (const auto &result: results) {
+        scanResults[result.first] = result.second;
+        QString qstringPath = QString::fromStdString(result.first);
+
+        // If the item at given path does not exist, expand to it and it will be created
+        if (!pathsToScan.value(qstringPath)) {
+            if (result.second.first != ScanResult::CLEAN &&
+                result.second.first != ScanResult::UNSUPPORTED_TYPE) {
+                expandToFlaggedItem(qstringPath);
+            }
+        } else {
+            handleFlaggedScanItem(result.first);
         }
 
+        getScanResultBits(result, scanResultBits);
+
+        if (result.second.second.empty()) {
+            continue;
+        }
         // Create a QWidget with a QHBoxLayout, workaround for selectable text in QTreeWidget
         auto *item = new QTreeWidgetItem(flaggedFilesTreeWidget);
-        auto qstringPath = QString::fromStdString(match.first);
+
         auto *widget = new QWidget();
         auto *layout = new QHBoxLayout();
         layout->setContentsMargins(0, 0, 0, 0);
@@ -702,6 +738,8 @@ void MainWindow::processScanResults(const std::map<std::string, std::pair<ScanRe
         layout->addWidget(label);
         layout->addStretch(1);
 
+        flaggedItems[result.first] = item;
+
         flaggedFilesTreeWidget->setItemWidget(item, 0, widget);
 
         // Add full path of file as a child item
@@ -715,8 +753,7 @@ void MainWindow::processScanResults(const std::map<std::string, std::pair<ScanRe
         flaggedFilesTreeWidget->setItemWidget(fullPathItem, 0, fullPathLabel);
         fullPathItem->setFlags(fullPathItem->flags() & ~Qt::ItemIsSelectable);
 
-
-        for (const auto &matchInfo: match.second.second) {
+        for (const auto &matchInfo: result.second.second) {
             auto *childItem = new QTreeWidgetItem(item);
             auto *childLabel = new QLabel(
                     QString::fromStdString(matchInfo.patternUsed.second) + ": found " +
@@ -734,10 +771,8 @@ void MainWindow::processScanResults(const std::map<std::string, std::pair<ScanRe
             childFont.setPointSize(9);
             childLabel->setFont(childFont);
         }
-
-        flaggedItems[match.first] = item;
-        flaggedFilesMatches[match.first] = match.second;
     }
+
     progressDialog->setLabelText("Done. " + getWarningMessage(scanResultBits));
     qDebug() << "Asynchronous task completed. Results processed.";
 }
@@ -766,17 +801,16 @@ void MainWindow::on_scanButton_clicked() {
         return;
     }
 
-    // Get all files in pathsToScan
+    // Get all files in pathsToScan that have been last edited in the given time period
     std::vector<std::string> filePaths;
-    for (const auto &item: pathsToScan) {
-        //If it is a file, add it to the list of files to scan
-        auto fileInfo = QFileInfo(item->data(0, Qt::UserRole).toString());
-        auto dateTime1 = ui->fromDateEdit->dateTime();
-        auto dateTime2 = ui->toDateEdit->dateTime();
-
-        if (!fileInfo.isDir() &&
-            (fileInfo.lastModified() >= dateTime1 && fileInfo.lastModified() <= dateTime2)) {
-            filePaths.push_back(item->data(0, Qt::UserRole).toString().toStdString());
+    for (auto it = pathsToScan.constBegin(); it != pathsToScan.constEnd(); ++it) {
+        const auto &key = it.key();
+        // Check if the path is a file and if the last edited date is within range
+        QFileInfo fileInfo(key);
+        if (fileInfo.isFile() &&
+            (fileInfo.lastModified() >= ui->fromDateEdit->dateTime() &&
+             fileInfo.lastModified() <= ui->toDateEdit->dateTime())) {
+            filePaths.push_back(key.toStdString());
         }
     }
 
@@ -790,7 +824,7 @@ void MainWindow::on_scanButton_clicked() {
     }
     flaggedFilesTreeWidget->clear();
     flaggedItems.clear();
-    flaggedFilesMatches.clear();
+    scanResults.clear();
     ui->flaggedSearchBox->clear();
 
     // Scan the files in a separate thread,
@@ -853,58 +887,51 @@ void MainWindow::on_scanButton_clicked() {
 }
 
 void MainWindow::on_removeSelectedButton_2_clicked() {
-    // Get all checked items
+    // Get all checked items, only considering topmost checked items
     QList<QTreeWidgetItem *> checkedItems;
-    for (const auto &item: pathsToScan) {
-        if (item->checkState(0) == Qt::Checked) {
-            checkedItems.append(item);
+
+    for (auto &item : pathsToScan) {
+        if (item && item->checkState(0) == Qt::Checked) {
+            bool isTopmost = true;
+
+            // Check if the current item has any ancestors in the checkedItems list
+            QTreeWidgetItem *parent = item->parent();
+            while (parent) {
+                if (checkedItems.contains(parent)) {
+                    isTopmost = false;
+                    break;
+                }
+                parent = parent->parent();
+            }
+
+            if (isTopmost) {
+                checkedItems.append(item);
+            }
         }
     }
 
     if (checkedItems.isEmpty()) {
         qDebug() << "No items selected for removal.";
+        QMessageBox::information(this, "No items selected", "No items selected for removal.");
         return;
     }
 
-    auto *futureWatcher = new QFutureWatcher<void>(this);
-
-    QFuture<void> future = QtConcurrent::run([this, checkedItems]() mutable {
-        while (!checkedItems.isEmpty()) {
-            auto item = checkedItems.takeFirst();
-            removeItemFromTree(item);
-            auto parent = item->parent();
-            if (parent) {
-                delete item;
-                // if the parent item has no children, remove it from the tree
-                if (parent->childCount() == 0 && parent != myRootItem) {
-                    removeItemFromTree(parent);
-                    delete parent;
-                }
+    // Remove the checked items and their children
+    while (!checkedItems.isEmpty()) {
+        auto item = checkedItems.takeFirst();
+        QString itemPath = item->data(0, Qt::UserRole).toString();
+        removeItemFromTree(item);
+        pathsToScan.remove(itemPath);
+        // Remove all flagged items that are children of the removed item
+        for (auto iter = pathsToScan.begin(); iter != pathsToScan.end();) {
+            if (iter.key().startsWith(itemPath)) {
+                iter = pathsToScan.erase(iter);
+            } else {
+                ++iter;
             }
         }
-    });
-
-    auto *progressDialog = new QProgressDialog("Removing selected items", "Cancel", 0, 0);
-    progressDialog->setMinimumDuration(2000);
-
-    QObject::connect(progressDialog, &QProgressDialog::canceled, [futureWatcher, progressDialog]() {
-        if (futureWatcher->future().isFinished()) { return; }
-        futureWatcher->future().cancel();
-        progressDialog->close();
-        progressDialog->deleteLater();
-        futureWatcher->deleteLater();
-    });
-
-    QObject::connect(futureWatcher, &QFutureWatcher<void>::finished, [futureWatcher, progressDialog]() {
-        if (futureWatcher->future().isCanceled()) { return; }
-        progressDialog->close();
-        progressDialog->deleteLater();
-        futureWatcher->deleteLater();
-    });
-    futureWatcher->setFuture(future);
-    progressDialog->exec();
+    }
 }
-
 
 void MainWindow::on_selectAllFlaggedButton_clicked() {
     for (int i = 0; i < flaggedFilesTreeWidget->topLevelItemCount(); ++i) {
@@ -935,7 +962,8 @@ void MainWindow::on_unflagSelectedButton_clicked() {
         auto *checkBox = qobject_cast<QCheckBox *>(layout->itemAt(0)->widget());
 
         if (checkBox->checkState() == Qt::Checked) {
-            auto *childLabel = qobject_cast<QLabel *>(flaggedFilesTreeWidget->itemWidget(topLevelItem->child(0), 0));
+            auto *childLabel = qobject_cast<QLabel *>(
+                    flaggedFilesTreeWidget->itemWidget(topLevelItem->child(0), 0));
             auto itemToRemove = childLabel->text().split(":").last().trimmed().toStdString();
 
             flaggedItems.remove(itemToRemove);
@@ -1096,7 +1124,8 @@ void MainWindow::on_newConfigButton_clicked() {
     // If the file is empty or nonexistent
     if (!file.exists()) {
         qDebug() << "File " << fileName << " does not exist";
-        createInfoDialog("File does not exist", "The selected file does not exist or could not be found or opened.");
+        createInfoDialog("File does not exist",
+                         "The selected file does not exist or could not be found or opened.");
         return;
     }
 
@@ -1148,8 +1177,8 @@ void MainWindow::on_flaggedSearchBox_textEdited(const QString &newText) {
     std::string newTextStdString = newText.toStdString();
     std::transform(newTextStdString.begin(), newTextStdString.end(), newTextStdString.begin(), ::tolower);
 
-    for (const auto &key: flaggedFilesMatches.keys()) {
-        auto matchPair = flaggedFilesMatches[key];
+    for (const auto &key: scanResults.keys()) {
+        auto matchPair = scanResults[key];
         for (const auto &matchItem: matchPair.second) {
             std::string filepathString = key;
             std::string matchString = matchItem.match;

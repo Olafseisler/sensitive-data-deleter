@@ -69,7 +69,7 @@ private:
     QMap<QString, QTreeWidgetItem *> pathsToScan;
 
     QMap<std::string, QTreeWidgetItem *> flaggedItems;
-    QMap<std::string, std::pair<ScanResult, std::vector<MatchInfo>>> flaggedFilesMatches;
+    QMap<std::string, std::pair<ScanResult, std::vector<MatchInfo>>> scanResults;
 
     ConfigManager *configManager;
     QTreeWidgetItem *myRootItem;
@@ -83,8 +83,7 @@ private:
 
     void setupUI();
 
-    void constructScanTreeViewRecursively(QTreeWidgetItem *parentItem, const QString &path, int depth = 0,
-                                          bool useShortName = false);
+    void constructScanTreeViewRecursively(QTreeWidgetItem *parentItem, const QString &path);
 
     void updateTreeItem(QTreeWidgetItem *item, const QString &path);
 
@@ -93,6 +92,7 @@ private:
     void removeItemFromTree(QTreeWidgetItem *item);
 
     QString getParentPath(const QString &dirPath);
+    void expandToFlaggedItem(const QString &path);
 
     QTreeWidgetItem *findItemForPath(QTreeWidget *treeWidget, const QString &path);
 
@@ -102,13 +102,12 @@ private:
 
     QDialog *createInfoDialog(const QString &title, const QString &labelText);
 
-    void processScanResults(const std::map<std::string, std::pair<ScanResult, std::vector<MatchInfo>>>& matches,
+    void processScanResults(const std::map<std::string, std::pair<ScanResult, std::vector<MatchInfo>>>& results,
                             QProgressDialog *progressDialog);
 
     void setRowBackgroundColor(QTreeWidgetItem *item, const QColor &color, int columnCount);
 
-    void handleFlaggedScanItem(const std::pair<std::string, std::pair<ScanResult, std::vector<MatchInfo>>> &match,
-                               uint8_t &scanResultBits);
+    void handleFlaggedScanItem(const std::string &flaggedPath);
 
     void updateConfigPresentation();
 };

@@ -23,13 +23,13 @@
 #include <hs/hs.h>
 
 enum ScanResult {
+    UNDEFINED,
     CLEAN,
     FLAGGED,
     UNSUPPORTED_TYPE,
     UNREADABLE,
     FLAGGED_BUT_UNWRITABLE,
-    DIRECTORY_TOO_DEEP,
-    UNDEFINED
+    DIRECTORY_TOO_DEEP
 };
 
 struct MatchInfo {

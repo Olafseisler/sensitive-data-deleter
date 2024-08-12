@@ -32,7 +32,10 @@ add_executable(${PROJECT} src/main.cpp ${QT_RESOURCES}
         src/filescanner.cpp
         src/filescanner.h
         src/chunkreader.cpp
-        src/chunkreader.h)
+        src/chunkreader.h
+        src/lazyloadingtreewidget.cpp
+        src/lazyloadingtreewidget.h
+        src/lazyloadingtreewidget.h)
 
 target_link_libraries(${PROJECT}
         Qt::Core
