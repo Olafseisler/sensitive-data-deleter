@@ -22,7 +22,6 @@
 #include <algorithm>
 #include <thread>
 #include <hs/hs.h>
-#include <QObject>
 
 enum ScanResult {
     UNDEFINED,
@@ -80,8 +79,7 @@ public:
 
 };
 
-class FileScanner : public QObject {
-    Q_OBJECT
+class FileScanner {
 
 public:
     void scanFiles(QPromise<std::map<std::string, std::pair<ScanResult, std::vector<MatchInfo>>>> &promise,
@@ -118,8 +116,6 @@ private:
     std::vector<uint32_t> flags;
     std::vector<uint32_t> ids;
 
-signals:
-    void scanResultsBatchReady(std::map<std::string, std::pair<ScanResult, std::vector<MatchInfo>>> matches);
 };
 
 

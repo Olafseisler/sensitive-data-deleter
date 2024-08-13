@@ -1,7 +1,7 @@
 //
 // Created by Olaf Seisler on 18.04.2024.
 //
-
+#include <algorithm>
 #include <fstream>
 #include <algorithm>
 #include <filesystem>
@@ -25,7 +25,7 @@ FileScanner::scanFiles(QPromise<std::map<std::string, std::pair<ScanResult, std:
                        const std::map<std::string, std::string> &fileTypes) {
 
     hs_compile_error_t *compile_err;
-    flags = std::vector<unsigned int>(patterns.size(), HS_FLAG_UTF8 | HS_FLAG_SOM_LEFTMOST);
+    flags = std::vector<unsigned int>(patterns.size(), HS_FLAG_SINGLEMATCH);
     for (int i = 0; i < patterns.size(); ++i) {
         ids.push_back(i);
     }
@@ -98,10 +98,6 @@ void FileScanner::scannerWorker(QPromise<std::map<std::string, std::pair<ScanRes
         {
             std::lock_guard<std::mutex> lock(matches_mutex);
             matches[filePath.string()] = result;
-            if (matches.size() % BATCH_SIZE == 0) {
-                emit scanResultsBatchReady(matches);
-                matches.clear();
-            }
         }
         size_t processed = ++filesProcessed;
         promise.setProgressValue(static_cast<int>((processed * 100) / totalFiles));
@@ -149,6 +145,7 @@ FileScanner::scanFileForSensitiveData(const std::filesystem::path &filePath, hs_
 
     while (true) {
         char buffer[CHUNK_SIZE];
+        std::memset(buffer, 0, CHUNK_SIZE);
         scanContext.chunk = buffer;
         size_t numBytesRead = chunkReader->readChunkFromFile(buffer, CHUNK_SIZE);
         if (numBytesRead == 0) {
@@ -156,7 +153,6 @@ FileScanner::scanFileForSensitiveData(const std::filesystem::path &filePath, hs_
         } else if (numBytesRead == -1) {
             continue;
         }
-
 
         scanChunkWithRegex(buffer, scanContext, threadScratch);
     }
@@ -176,13 +172,15 @@ int FileScanner::eventHandler(uint32_t id, uint64_t from, uint64_t to, uint32_t 
         return 0;
     }
 
+    uint64_t startIndex = to > 30 ? to - 30 : 0;
+    uint64_t endIndex = to + 10 > CHUNK_SIZE ? CHUNK_SIZE : to + 10;
     scanContext->returnPair->first = ScanResult::FLAGGED;
     scanContext->returnPair->second.emplace_back(
             MatchInfo{
                     .patternUsed = std::make_pair(scanContext->scanPatterns->at(id),
                                                   scanContext->scanPatternDescriptions->at(id)),
-                    .match = std::string(scanContext->chunk + from, to - from),
-                    .startIndex = from,
+                    .match = std::string(scanContext->chunk + startIndex, scanContext->chunk + endIndex),
+                    .startIndex = startIndex,
                     .endIndex = to
             });
 
@@ -192,7 +190,7 @@ int FileScanner::eventHandler(uint32_t id, uint64_t from, uint64_t to, uint32_t 
 void FileScanner::scanChunkWithRegex(const char *chunk,
                                      ScanContext &scanContext, hs_scratch_t *scratch) {
     if (hs_scan(database, chunk, CHUNK_SIZE, 0, scratch, &eventHandler, &scanContext) != HS_SUCCESS) {
-        std::cerr << "ERROR: Unable to scan input buffer." << std::endl;
+        qDebug() << "ERROR: Unable to scan input buffer.";
         hs_free_scratch(scratch);
         hs_free_database(database);
     }
@@ -250,7 +248,7 @@ void FileScanner::deleteFiles(std::vector<std::string> &filePaths) {
             std::filesystem::remove(filePath);
 
         } catch (std::exception &e) {
-            std::cerr << "Failed to scramble file: " << e.what() << std::endl;
+            qWarning() << "Failed to scramble file: " << e.what();
         }
     }
 }

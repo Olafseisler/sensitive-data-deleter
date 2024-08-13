@@ -59,7 +59,10 @@ private slots:
     void on_flaggedSearchBox_textEdited(const QString &newText);
 
 public slots:
-    void processScanResults(const std::map<std::string, std::pair<ScanResult, std::vector<MatchInfo>>>& results);
+
+    void onFlaggedFilesScrollBarMoved(int value);
+
+    void processScanResults(const std::map<std::string, std::pair<ScanResult, std::vector<MatchInfo>>> &results);
 
 private:
     QTreeWidget *fileTreeWidget;
@@ -83,6 +86,7 @@ private:
     QFileIconProvider iconProvider = QFileIconProvider();
     Ui::MainWindow *ui;
     uint8_t scanResultBits = 0;
+    int numFlaggedItemsLoaded = 0;
 
     void setupUI();
 
@@ -95,11 +99,8 @@ private:
     void removeItemFromTree(QTreeWidgetItem *item);
 
     QString getParentPath(const QString &dirPath);
+
     void expandToFlaggedItem(const QString &path);
-
-    QTreeWidgetItem *findItemForPath(QTreeWidget *treeWidget, const QString &path);
-
-    QTreeWidgetItem *findItemForPath(QTreeWidgetItem *parentItem, const QString &path);
 
     QDialog *createConfirmationDialog(const QString &title, const QString &labelText, const QString &buttonText);
 
@@ -109,7 +110,13 @@ private:
 
     void setRowBackgroundColor(QTreeWidgetItem *item, const QColor &color, int columnCount);
 
+    void addFlaggedItemWidget(const QString &path, const std::vector<MatchInfo> &matches);
+
+    void loadNextFlaggedItemsBatch(const QString &searchText = "");
+
     void handleFlaggedScanItem(const std::string &flaggedPath);
+
+    bool isStringInMatchInfo(const MatchInfo &match, const std::string &path, const std::string &searchString);
 
     void updateConfigPresentation();
 };

@@ -210,7 +210,7 @@ void ConfigManager::updateConfigFile() {
         scanPatternsArray.append(scanPatternObj);
     }
 
-    obj["scanFileTypes"] = fileTypesArray;
+    obj["fileTypes"] = fileTypesArray;
     obj["scanPatterns"] = scanPatternsArray;
 
     QJsonDocument doc(obj);

@@ -2,16 +2,20 @@
 #include <QDir>
 #include <QFileSystemModel>
 #include <QFileDialog>
+#include <QDesktopServices>
 #include <QCheckBox>
 #include <QFutureWatcher>
 #include <QtConcurrent/QtConcurrentRun>
 #include <QProgressDialog>
 #include <QFileIconProvider>
 #include <QMessageBox>
+#include <QScrollBar>
+#include <QObject>
 #include <filesystem>
 #include <set>
 
 #define MAX_DEPTH 10
+#define BATCH_SIZE 50 // Max number of flagged widget items to load at a time
 
 namespace fs = std::filesystem;
 
@@ -41,10 +45,8 @@ void MainWindow::setupUI() {
     fileTypesTableWidget = ui->fileTypesTableWidget;
     scanPatternsTableWidget = ui->scanPatternsTableWidget;
     fileTreeWidget->setSelectionBehavior(QAbstractItemView::SelectRows);
-
     flaggedFilesTreeWidget->setColumnCount(1);
-    flaggedFilesTreeWidget->setSelectionBehavior(QAbstractItemView::SelectRows);
-    flaggedFilesTreeWidget->setSelectionMode(QAbstractItemView::MultiSelection);
+
     connect(watcher, &QFileSystemWatcher::directoryChanged, this, &MainWindow::onDirectoryChanged);
 
     fileTypesTableWidget->setColumnCount(4);
@@ -76,7 +78,6 @@ void MainWindow::setupUI() {
         }
     });
 
-    connect(fileScanner, &FileScanner::scanResultsBatchReady, this, &MainWindow::processScanResults);
     flaggedFilesTreeWidget->setHeaderLabel("Flagged Files");
     fileTreeWidget->setHeaderLabel("Files and Folders");
 
@@ -329,37 +330,6 @@ void MainWindow::updateTreeItem(QTreeWidgetItem *item, const QString &path) {
     item->setCheckState(0, Qt::Unchecked);
 }
 
-QTreeWidgetItem *MainWindow::findItemForPath(QTreeWidgetItem *parentItem, const QString &path) {
-    // Check if the current item's path matches
-    if (parentItem->text(0) == path) {
-        return parentItem;
-    }
-
-    // Recursively search in child items
-    for (int i = 0; i < parentItem->childCount(); ++i) {
-        QTreeWidgetItem *childItem = parentItem->child(i);
-        // If child is a directory, search in it
-        if (QFileInfo(childItem->text(0)).isDir()) {
-            QTreeWidgetItem *foundItem = findItemForPath(childItem, path);
-            if (foundItem) {
-                return foundItem;
-            }
-        }
-    }
-
-    return nullptr;
-}
-
-QTreeWidgetItem *MainWindow::findItemForPath(QTreeWidget *treeWidget, const QString &path) {
-    for (const auto &item: pathsToScan) {
-        if (item->data(0, Qt::UserRole) == path) {
-            return item;
-        }
-    }
-
-    return nullptr;
-}
-
 bool isSystemFile(const fs::path &path) {
     static const std::set<std::string> ignoredFiles = {
             ".DS_Store", "desktop.ini", "Thumbs.db"
@@ -517,21 +487,26 @@ void MainWindow::on_addFileButton_clicked() {
         QString parentPath = getParentPath(filePath);
         if (!parentPath.isEmpty()) {
             auto *parentItem = pathsToScan.value(parentPath);
-            if (parentItem) {
-                createTreeItem(parentItem, filePath, true);
+            if (parentItem) { // Immediate parent is expanded, add child item
+                auto *childItem = createTreeItem(parentItem, filePath, true);
+                parentItem->addChild(childItem);
+                pathsToScan[filePath] = childItem;
+            } else { // Immediate parent is collapsed, do not create a tree item yet
+                pathsToScan[filePath] = nullptr;
             }
             continue;
         }
 
-        createTreeItem(myRootItem, filePath, false);
+        pathsToScan[filePath] = createTreeItem(myRootItem, filePath, false);
+        watcher->addPath(filePath);
     }
 
     // Uncheck all items in the tree
     for (const auto &item: pathsToScan) {
-        item->setCheckState(0, Qt::Unchecked);
+        if (item)
+            item->setCheckState(0, Qt::Unchecked);
     }
 
-    myRootItem->setExpanded(true);
     fileTreeWidget->resizeColumnToContents(1);
 }
 
@@ -708,76 +683,131 @@ QString getWarningMessage(uint8_t scanResultBits) {
 
 void
 MainWindow::processScanResults(const std::map<std::string, std::pair<ScanResult, std::vector<MatchInfo>>> &results) {
+    int numFlaggedFiles = 0;
     for (const auto &result: results) {
         scanResults[result.first] = result.second;
-        QString qstringPath = QString::fromStdString(result.first);
         getScanResultBits(result);
-        // If the item at given path does not exist, expand to it and it will be created
-        if (!pathsToScan.value(qstringPath)) {
-            if (result.second.first != ScanResult::CLEAN &&
-                result.second.first != ScanResult::UNSUPPORTED_TYPE) {
-                expandToFlaggedItem(qstringPath);
-            }
-        } else {
-            handleFlaggedScanItem(result.first);
+
+        if (result.second.first == ScanResult::FLAGGED) {
+            numFlaggedFiles++;
         }
 
-        if (result.second.second.empty()) {
+        // Major performance bottleneck, need to find a better way to handle this
+
+//        QString qstringPath = QString::fromStdString(result.first);
+//        // If the item at given path does not exist, expand to it and it will be created
+//        if (!pathsToScan.value(qstringPath)) {
+//            if (result.second.first != ScanResult::CLEAN &&
+//                result.second.first != ScanResult::UNSUPPORTED_TYPE) {
+//                expandToFlaggedItem(qstringPath);
+//            }
+//        } else {
+//            handleFlaggedScanItem(result.first);
+//        }
+
+    }
+
+    qDebug() << "Number of flagged files: " << numFlaggedFiles;
+    loadNextFlaggedItemsBatch();
+}
+
+void MainWindow::addFlaggedItemWidget(const QString &path, const std::vector<MatchInfo> &matches) {
+    // Create a QWidget with a QHBoxLayout, workaround for selectable text in flaggedFilesWidget
+    auto *item = new QTreeWidgetItem(flaggedFilesTreeWidget);
+
+    auto *widget = new QWidget();
+    auto *layout = new QHBoxLayout();
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(20);
+    widget->setLayout(layout);
+    auto *checkBox = new QCheckBox();
+    auto shortName = path.split("/").last(); // Get the file name only
+    auto *label = new QLabel("<a href=\"file:" + path + "\">" + shortName + "</a>");
+    label->setOpenExternalLinks(false);
+    connect(label, &QLabel::linkActivated, this, [this, path]() {
+        QDesktopServices::openUrl(QUrl::fromLocalFile(path));
+    });
+
+    QFont font = label->font();
+    font.setPointSize(10);
+    label->setFont(font);
+
+    layout->addWidget(checkBox);
+    layout->addWidget(label);
+    layout->addStretch(1);
+
+    flaggedItems[path.toStdString()] = item;
+
+    flaggedFilesTreeWidget->setItemWidget(item, 0, widget);
+
+    // Add full path of file as a child item
+    auto *fullPathItem = new QTreeWidgetItem(item);
+    auto *fullPathLabel = new QLabel("Full path: " + path);
+    QFont fullPathFont = fullPathLabel->font();
+    fullPathFont.setPointSize(9);
+    fullPathLabel->setFont(fullPathFont);
+
+    fullPathLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    flaggedFilesTreeWidget->setItemWidget(fullPathItem, 0, fullPathLabel);
+    fullPathItem->setFlags(fullPathItem->flags() & ~Qt::ItemIsSelectable);
+
+    for (const auto &matchInfo: matches) {
+        std::string matchString = matchInfo.match;
+        // Remove all leading + trailing whitespace from the match and replace newlines with a single space
+        matchString = std::regex_replace(matchString, std::regex("^\\s+|\\s+$"), "");
+        matchString = std::regex_replace(matchString, std::regex("\\s+"), " ");
+
+        auto *childItem = new QTreeWidgetItem(item);
+        auto *childLabel = new QLabel(
+                QString::fromStdString(matchInfo.patternUsed.second) + ": found ..." +
+                QString::fromStdString(matchString) +
+                "... from index " + QString::number(matchInfo.startIndex) + " to " +
+                QString::number(matchInfo.endIndex)
+        );
+
+        // Set child item to not be selectable
+        childItem->setFlags(childItem->flags() & ~Qt::ItemIsSelectable);
+        childLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
+        flaggedFilesTreeWidget->setItemWidget(childItem, 0, childLabel);
+
+        auto childFont = childLabel->font();
+        childFont.setPointSize(9);
+        childLabel->setFont(childFont);
+    }
+}
+
+void MainWindow::onFlaggedFilesScrollBarMoved(int value) {
+    qDebug() << "Scrollbar value " << value << " Max value: " << flaggedFilesTreeWidget->verticalScrollBar()->maximum();
+    if (value == flaggedFilesTreeWidget->verticalScrollBar()->maximum() &&
+        numFlaggedItemsLoaded < scanResults.size()) {
+        loadNextFlaggedItemsBatch();
+    }
+}
+
+void MainWindow::loadNextFlaggedItemsBatch(const QString &searchText) {
+    int itemsToLoad = numFlaggedItemsLoaded + qMin(BATCH_SIZE, (int) scanResults.size() - numFlaggedItemsLoaded);
+    std::string stdSearchText = searchText.toStdString();
+    for (auto it = scanResults.constBegin(); it != scanResults.constEnd(); ++it) {
+        if (numFlaggedItemsLoaded >= itemsToLoad)
+            break;
+
+        if (it.value().second.empty())
             continue;
-        }
-        // Create a QWidget with a QHBoxLayout, workaround for selectable text in QTreeWidget
-        auto *item = new QTreeWidgetItem(flaggedFilesTreeWidget);
 
-        auto *widget = new QWidget();
-        auto *layout = new QHBoxLayout();
-        layout->setContentsMargins(0, 0, 0, 0);
-        layout->setSpacing(20);
-        widget->setLayout(layout);
-        auto *checkBox = new QCheckBox();
-        auto shortName = qstringPath.split("/").last(); // Get the file name only
-        auto *label = new QLabel(shortName);
-        label->setTextInteractionFlags(Qt::TextSelectableByMouse);
-        QFont font = label->font();
-        font.setPointSize(10);
-        label->setFont(font);
+        if (flaggedItems.contains(it.key()))
+            continue;
 
-        layout->addWidget(checkBox);
-        layout->addWidget(label);
-        layout->addStretch(1);
+        if (!searchText.isEmpty() && it.key().find(stdSearchText) != std::string::npos)
+            continue;
 
-        flaggedItems[result.first] = item;
+        addFlaggedItemWidget(QString::fromStdString(it.key()), scanResults[it.key()].second);
+        numFlaggedItemsLoaded++;
+    }
 
-        flaggedFilesTreeWidget->setItemWidget(item, 0, widget);
-
-        // Add full path of file as a child item
-        auto *fullPathItem = new QTreeWidgetItem(item);
-        auto *fullPathLabel = new QLabel("Full path: " + qstringPath);
-        QFont fullPathFont = fullPathLabel->font();
-        fullPathFont.setPointSize(9);
-        fullPathLabel->setFont(fullPathFont);
-
-        fullPathLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
-        flaggedFilesTreeWidget->setItemWidget(fullPathItem, 0, fullPathLabel);
-        fullPathItem->setFlags(fullPathItem->flags() & ~Qt::ItemIsSelectable);
-
-        for (const auto &matchInfo: result.second.second) {
-            auto *childItem = new QTreeWidgetItem(item);
-            auto *childLabel = new QLabel(
-                    QString::fromStdString(matchInfo.patternUsed.second) + ": found " +
-                    QString::fromStdString(matchInfo.match) +
-                    " from index " + QString::number(matchInfo.startIndex) + " to " +
-                    QString::number(matchInfo.endIndex)
-            );
-
-            // Set child item to not be selectable
-            childItem->setFlags(childItem->flags() & ~Qt::ItemIsSelectable);
-            childLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
-            flaggedFilesTreeWidget->setItemWidget(childItem, 0, childLabel);
-
-            auto childFont = childLabel->font();
-            childFont.setPointSize(9);
-            childLabel->setFont(childFont);
-        }
+    auto scrollBar = flaggedFilesTreeWidget->verticalScrollBar();
+    if (scrollBar && !scrollBar->isHidden()) {
+        // Check if the connection already exists
+        connect(scrollBar, &QScrollBar::valueChanged, this, &MainWindow::onFlaggedFilesScrollBarMoved);
     }
 }
 
@@ -829,6 +859,7 @@ void MainWindow::on_scanButton_clicked() {
     flaggedFilesTreeWidget->clear();
     flaggedItems.clear();
     scanResults.clear();
+    numFlaggedItemsLoaded = 0;
     ui->flaggedSearchBox->clear();
     scanResultBits = 0;
 
@@ -1183,28 +1214,58 @@ void MainWindow::on_startConfigButton_clicked() {
     updateConfigPresentation();
 }
 
+bool MainWindow::isStringInMatchInfo(const MatchInfo &match, const std::string &path, const std::string &searchString) {
+    std::string lowerFilePath = path;
+    std::string lowerMatch = match.match;
+    std::string lowerPattern = match.patternUsed.second;
+
+    std::transform(lowerFilePath.begin(), lowerFilePath.end(), lowerFilePath.begin(), ::tolower);
+    std::transform(lowerFilePath.begin(), lowerFilePath.end(), lowerFilePath.begin(), ::tolower);
+    std::transform(lowerMatch.begin(), lowerMatch.end(), lowerMatch.begin(), ::tolower);
+    std::transform(lowerPattern.begin(), lowerPattern.end(), lowerPattern.begin(), ::tolower);
+
+    if (lowerFilePath.find(searchString) != std::string::npos) {
+        return true;
+    }
+    if (lowerMatch.find(searchString) != std::string::npos) {
+        return true;
+    }
+    if (lowerPattern.find(searchString) != std::string::npos) {
+        return true;
+    }
+
+    return false;
+}
 
 void MainWindow::on_flaggedSearchBox_textEdited(const QString &newText) {
-    std::string newTextStdString = newText.toStdString();
-    std::transform(newTextStdString.begin(), newTextStdString.end(), newTextStdString.begin(), ::tolower);
+    std::string searchText = newText.toStdString();
+    std::transform(searchText.begin(), searchText.end(), searchText.begin(), ::tolower);
+    int activeItems = 0;
+    int matchingItems = 0;
 
-    for (const auto &key: scanResults.keys()) {
-        auto matchPair = scanResults[key];
-        for (const auto &matchItem: matchPair.second) {
-            std::string filepathString = key;
-            std::string matchString = matchItem.match;
-            std::string patternString = matchItem.patternUsed.second;
-            std::transform(filepathString.begin(), filepathString.end(), filepathString.begin(), ::tolower);
-            std::transform(matchString.begin(), matchString.end(), matchString.begin(), ::tolower);
-            std::transform(patternString.begin(), patternString.end(), patternString.begin(), ::tolower);
-            if (matchString.find(newTextStdString) != std::string::npos ||
-                patternString.find(newTextStdString) != std::string::npos ||
-                filepathString.find(newTextStdString) != std::string::npos) {
-                flaggedItems[key]->setHidden(false);
-                break;
-            } else {
-                flaggedItems[key]->setHidden(true);
+    while (true) {
+        for (auto it = scanResults.begin(); it != scanResults.end(); ++it) {
+            const std::string &filePath = it.key();
+            const auto &matches = it.value();
+
+            for (const auto &match: matches.second) {
+                if (isStringInMatchInfo(match, filePath, searchText)) {
+                    matchingItems++;
+                    if (flaggedItems.contains(filePath)) {
+                        flaggedItems[filePath]->setHidden(false);
+                    }
+                } else {
+                    if (flaggedItems.contains(filePath)) {
+                        flaggedItems[filePath]->setHidden(true);
+                    }
+                }
+                activeItems++;
             }
+        }
+        if (activeItems < matchingItems) {
+            loadNextFlaggedItemsBatch(newText);
+        } else {
+            break;
         }
     }
 }
