@@ -862,6 +862,7 @@ void MainWindow::on_scanButton_clicked() {
     numFlaggedItemsLoaded = 0;
     ui->flaggedSearchBox->clear();
     scanResultBits = 0;
+    flaggedFilesTreeWidget->disconnect();
 
     // Scan the files in a separate thread,
     auto *futureWatcher = new QFutureWatcher<std::map<std::string, std::pair<ScanResult, std::vector<MatchInfo>>>>(
