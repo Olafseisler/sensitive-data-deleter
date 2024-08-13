@@ -310,6 +310,7 @@ void MainWindow::updateTreeItem(QTreeWidgetItem *item, const QString &path) {
         childToRemoveIndex--;
     }
 
+    // Add the items in the refreshed directory
     for (const QString &entry: dir.entryList(QDir::NoDotAndDotDot | QDir::Files | QDir::Dirs,
                                              QDir::SortFlags(Qt::AscendingOrder))) {
         QString childPath = path + "/" + entry;
@@ -317,6 +318,7 @@ void MainWindow::updateTreeItem(QTreeWidgetItem *item, const QString &path) {
         if (!childItem) {
             childItem = createTreeItem(item, childPath, true);
             if (QFileInfo(childPath).isDir()) {
+                watcher->addPath(childPath);
                 childItem->setChildIndicatorPolicy(QTreeWidgetItem::ShowIndicator);
             }
         }
@@ -377,6 +379,7 @@ void MainWindow::constructScanTreeViewRecursively(QTreeWidgetItem *parentItem, c
         if (isSystemFile(it->path())) {
             continue;
         }
+
         int current_depth = it.depth();
         if (current_depth > MAX_DEPTH) {
             it.pop();  // Skip deeper directories
@@ -394,9 +397,6 @@ void MainWindow::constructScanTreeViewRecursively(QTreeWidgetItem *parentItem, c
             }
         }
 
-        if (it->is_directory()) {
-            watcher->addPath(QString::fromStdString(it->path().string()));
-        }
         pathsToScan.insert(path, nullptr);
     }
 
@@ -457,7 +457,6 @@ void MainWindow::on_addFolderButton_clicked() {
                 item->setCheckState(0, Qt::Unchecked);
         }
 
-        watcher->addPath(dirPath);
         fileTreeWidget->resizeColumnToContents(0);
         return;
     }
@@ -557,6 +556,7 @@ void MainWindow::removeItemFromTree(QTreeWidgetItem *item) {
         childToRemoveIndex--;
     }
 
+    watcher->removePath(path);
     parent->removeChild(item);
     pathsToScan[path] = nullptr;
     delete item;

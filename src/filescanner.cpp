@@ -25,7 +25,7 @@ FileScanner::scanFiles(QPromise<std::map<std::string, std::pair<ScanResult, std:
                        const std::map<std::string, std::string> &fileTypes) {
 
     hs_compile_error_t *compile_err;
-    flags = std::vector<unsigned int>(patterns.size(), HS_FLAG_CASELESS | HS_FLAG_UTF8 | HS_FLAG_SOM_LEFTMOST);
+    flags = std::vector<unsigned int>(patterns.size(), HS_FLAG_UTF8 | HS_FLAG_SOM_LEFTMOST);
     for (int i = 0; i < patterns.size(); ++i) {
         ids.push_back(i);
     }
@@ -53,7 +53,7 @@ FileScanner::scanFiles(QPromise<std::map<std::string, std::pair<ScanResult, std:
         file_queue.push(std::filesystem::path(item));
     }
 
-    this->fileTypes = fileTypes;
+    this->scanFileTypes = fileTypes;
 
     // Scan files based on given patterns and file types with multiple threads
     std::atomic<size_t> filesProcessed = 0;
@@ -114,7 +114,7 @@ std::pair<ScanResult, std::vector<MatchInfo>>
 FileScanner::scanFileForSensitiveData(const std::filesystem::path &filePath, hs_scratch_t *threadScratch) {
 
     // Check if the file extension exists in the file types map
-    if (fileTypes.find(filePath.extension()) == fileTypes.end()) {
+    if (scanFileTypes.find(filePath.extension()) == scanFileTypes.end()) {
         return std::make_pair(ScanResult::UNSUPPORTED_TYPE, std::vector<MatchInfo>());
     }
     // If the file is not a text file based on MIME type, skip the file
@@ -171,6 +171,10 @@ FileScanner::scanFileForSensitiveData(const std::filesystem::path &filePath, hs_
 int FileScanner::eventHandler(uint32_t id, uint64_t from, uint64_t to, uint32_t flags,
                               void *context) {
     auto *scanContext = static_cast<ScanContext *>(context);
+
+    if (scanContext->returnPair->second.size() >= MAX_NUM_MATCHES) {
+        return 0;
+    }
 
     scanContext->returnPair->first = ScanResult::FLAGGED;
     scanContext->returnPair->second.emplace_back(

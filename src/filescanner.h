@@ -113,7 +113,7 @@ private:
     std::vector<const char *> scanPatterns;
     std::vector<const char *> scanPatternDescriptions;
 
-    std::map<std::string, std::string> fileTypes;
+    std::map<std::string, std::string> scanFileTypes;
     hs_database_t *database = nullptr;
     std::vector<uint32_t> flags;
     std::vector<uint32_t> ids;
