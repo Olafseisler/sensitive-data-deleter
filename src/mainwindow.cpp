@@ -25,6 +25,11 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
     configManager = new ConfigManager();
     watcher = new QFileSystemWatcher(this);
     fileScanner = new FileScanner();
+    searchDebounceTimer = new QTimer(this);
+    searchDebounceTimer->setInterval(700);
+    searchDebounceTimer->setSingleShot(true);
+    connect(searchDebounceTimer, &QTimer::timeout, this, &MainWindow::on_flaggedSearchBox_textEdited);
+    connect(ui->flaggedSearchBox, &QLineEdit::textEdited, this, &MainWindow::onSearchBoxTextEdited);
     setupUI();
 }
 
@@ -82,6 +87,10 @@ void MainWindow::setupUI() {
     fileTreeWidget->setHeaderLabel("Files and Folders");
 
     updateConfigPresentation();
+}
+
+void MainWindow::onSearchBoxTextEdited(const QString &newText) {
+    searchDebounceTimer->start();
 }
 
 void MainWindow::updateConfigPresentation() {
@@ -692,7 +701,7 @@ MainWindow::processScanResults(const std::map<std::string, std::pair<ScanResult,
             numFlaggedFiles++;
         }
 
-        // Major performance bottleneck, need to find a better way to handle this
+        // TODO: Major performance bottleneck, need to find a better way to handle this
 
 //        QString qstringPath = QString::fromStdString(result.first);
 //        // If the item at given path does not exist, expand to it and it will be created
@@ -708,7 +717,7 @@ MainWindow::processScanResults(const std::map<std::string, std::pair<ScanResult,
     }
 
     qDebug() << "Number of flagged files: " << numFlaggedFiles;
-    loadNextFlaggedItemsBatch();
+    loadNextFlaggedItemsBatch(ui->flaggedSearchBox->text());
 }
 
 void MainWindow::addFlaggedItemWidget(const QString &path, const std::vector<MatchInfo> &matches) {
@@ -777,10 +786,10 @@ void MainWindow::addFlaggedItemWidget(const QString &path, const std::vector<Mat
 }
 
 void MainWindow::onFlaggedFilesScrollBarMoved(int value) {
-    qDebug() << "Scrollbar value " << value << " Max value: " << flaggedFilesTreeWidget->verticalScrollBar()->maximum();
     if (value == flaggedFilesTreeWidget->verticalScrollBar()->maximum() &&
         numFlaggedItemsLoaded < scanResults.size()) {
         loadNextFlaggedItemsBatch();
+        qDebug() << "Loading next batch of " << BATCH_SIZE << " flagged items";
     }
 }
 
@@ -1238,7 +1247,8 @@ bool MainWindow::isStringInMatchInfo(const MatchInfo &match, const std::string &
     return false;
 }
 
-void MainWindow::on_flaggedSearchBox_textEdited(const QString &newText) {
+void MainWindow::on_flaggedSearchBox_textEdited() {
+    QString newText = ui->flaggedSearchBox->text();
     std::string searchText = newText.toStdString();
     std::transform(searchText.begin(), searchText.end(), searchText.begin(), ::tolower);
     int activeItems = 0;

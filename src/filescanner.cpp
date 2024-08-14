@@ -25,7 +25,7 @@ FileScanner::scanFiles(QPromise<std::map<std::string, std::pair<ScanResult, std:
                        const std::map<std::string, std::string> &fileTypes) {
 
     hs_compile_error_t *compile_err;
-    flags = std::vector<unsigned int>(patterns.size(), HS_FLAG_SINGLEMATCH);
+    flags = std::vector<unsigned int>(patterns.size(), HS_FLAG_SINGLEMATCH | HS_FLAG_UTF8);
     for (int i = 0; i < patterns.size(); ++i) {
         ids.push_back(i);
     }
@@ -190,9 +190,9 @@ int FileScanner::eventHandler(uint32_t id, uint64_t from, uint64_t to, uint32_t 
 void FileScanner::scanChunkWithRegex(const char *chunk,
                                      ScanContext &scanContext, hs_scratch_t *scratch) {
     if (hs_scan(database, chunk, CHUNK_SIZE, 0, scratch, &eventHandler, &scanContext) != HS_SUCCESS) {
-        qDebug() << "ERROR: Unable to scan input buffer.";
-        hs_free_scratch(scratch);
-        hs_free_database(database);
+        qDebug() << "ERROR: Unable to scan input buffer. Likely encountered invalid UTF-8 sequence.";
+//        hs_free_scratch(scratch);
+//        hs_free_database(database);
     }
 }
 

@@ -13,6 +13,7 @@
 #include <QDebug>
 #include <QProgressDialog>
 #include <QFileIconProvider>
+#include <QTimer>
 
 #include "ui_mainwindow.h"
 #include "configmanager.h"
@@ -56,11 +57,13 @@ private slots:
 
     void on_startConfigButton_clicked();
 
-    void on_flaggedSearchBox_textEdited(const QString &newText);
+    void on_flaggedSearchBox_textEdited();
 
 public slots:
 
     void onFlaggedFilesScrollBarMoved(int value);
+
+    void onSearchBoxTextEdited(const QString &newText);
 
     void processScanResults(const std::map<std::string, std::pair<ScanResult, std::vector<MatchInfo>>> &results);
 
@@ -87,6 +90,7 @@ private:
     Ui::MainWindow *ui;
     uint8_t scanResultBits = 0;
     int numFlaggedItemsLoaded = 0;
+    QTimer *searchDebounceTimer;
 
     void setupUI();
 
