@@ -4,6 +4,7 @@
   "dependencies": [
     "pkgconf",
     "minizip-ng",
+    "hyperscan",
     "tinyxml2",
     {
       "name": "poppler",

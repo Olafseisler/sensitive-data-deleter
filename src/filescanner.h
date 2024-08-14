@@ -38,6 +38,15 @@ struct MatchInfo {
     std::string match;
     size_t startIndex;
     size_t endIndex;
+
+    MatchInfo(const std::pair<std::string, std::string> &pattern,
+              const std::string &mtch,
+              size_t startIdx,
+              size_t endIdx)
+        : patternUsed(pattern), 
+          match(mtch), 
+          startIndex(startIdx), 
+          endIndex(endIdx) {}
 };
 
 struct ScanContext {
@@ -45,6 +54,15 @@ struct ScanContext {
     std::vector<const char *> *scanPatterns;
     std::vector<const char *> *scanPatternDescriptions;
     const char *chunk;
+
+    ScanContext(std::pair<ScanResult, std::vector<MatchInfo>> *retPair,
+                std::vector<const char *> *patterns,
+                std::vector<const char *> *descriptions,
+                const char *chnk)
+        : returnPair(retPair), 
+          scanPatterns(patterns), 
+          scanPatternDescriptions(descriptions), 
+          chunk(chnk) {}
 };
 
 class ThreadSafeQueue {

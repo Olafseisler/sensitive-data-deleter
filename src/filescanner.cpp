@@ -110,28 +110,24 @@ std::pair<ScanResult, std::vector<MatchInfo>>
 FileScanner::scanFileForSensitiveData(const std::filesystem::path &filePath, hs_scratch_t *threadScratch) {
 
     // Check if the file extension exists in the file types map
-    if (scanFileTypes.find(filePath.extension()) == scanFileTypes.end()) {
+    if (scanFileTypes.find(filePath.extension().string()) == scanFileTypes.end()) {
         return std::make_pair(ScanResult::UNSUPPORTED_TYPE, std::vector<MatchInfo>());
     }
     // If the file is not a text file based on MIME type, skip the file
-    QMimeType mimeType = QMimeDatabase().mimeTypeForFile(QString::fromStdString(filePath));
+    QMimeType mimeType = QMimeDatabase().mimeTypeForFile(QString::fromStdString(filePath.string()));
     if (!mimeType.inherits("text/plain") &&
         !mimeType.inherits("application/pdf") &&
         !mimeType.inherits("application/zip")) {
         return std::make_pair(ScanResult::UNSUPPORTED_TYPE, std::vector<MatchInfo>());
     }
-    QFileInfo fileInfo(QString::fromStdString(filePath));
+    QFileInfo fileInfo(QString::fromStdString(filePath.string()));
     if (!fileInfo.isReadable()) {
         return std::make_pair(ScanResult::UNREADABLE, std::vector<MatchInfo>());
     }
 
     auto returnPair = std::make_pair(ScanResult::CLEAN, std::vector<MatchInfo>());
-    ScanContext scanContext{
-            .returnPair = &returnPair,
-            .scanPatterns = &scanPatterns,
-            .scanPatternDescriptions = &scanPatternDescriptions,
-            .chunk = nullptr
-    };
+    ScanContext scanContext(&returnPair, &scanPatterns, &scanPatternDescriptions, nullptr);
+    
     std::unique_ptr<ChunkReader> chunkReader;
     try {
         chunkReader.reset(ChunkReaderFactory::createReader(filePath));
@@ -176,23 +172,20 @@ int FileScanner::eventHandler(uint32_t id, uint64_t from, uint64_t to, uint32_t 
     uint64_t endIndex = to + 10 > CHUNK_SIZE ? CHUNK_SIZE : to + 10;
     scanContext->returnPair->first = ScanResult::FLAGGED;
     scanContext->returnPair->second.emplace_back(
-            MatchInfo{
-                    .patternUsed = std::make_pair(scanContext->scanPatterns->at(id),
-                                                  scanContext->scanPatternDescriptions->at(id)),
-                    .match = std::string(scanContext->chunk + startIndex, scanContext->chunk + endIndex),
-                    .startIndex = startIndex,
-                    .endIndex = to
-            });
+        std::make_pair(scanContext->scanPatterns->at(id), scanContext->scanPatternDescriptions->at(id)),
+        std::string(scanContext->chunk + startIndex, scanContext->chunk + endIndex),
+        startIndex,
+        to
+    );
 
     return 0;
 }
+
 
 void FileScanner::scanChunkWithRegex(const char *chunk,
                                      ScanContext &scanContext, hs_scratch_t *scratch) {
     if (hs_scan(database, chunk, CHUNK_SIZE, 0, scratch, &eventHandler, &scanContext) != HS_SUCCESS) {
         qDebug() << "ERROR: Unable to scan input buffer. Likely encountered invalid UTF-8 sequence.";
-//        hs_free_scratch(scratch);
-//        hs_free_database(database);
     }
 }
 

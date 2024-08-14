@@ -20,7 +20,7 @@ find_package(tinyxml2 CONFIG REQUIRED)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(POPPLER_CPP REQUIRED IMPORTED_TARGET poppler-cpp)
 
-include_directories(/opt/homebrew/Cellar/vectorscan/5.4.11/include)
+include_directories(${CMAKE_SOURCE_DIR}/vcpkg_installed/x64-windows-static/include/hs)
 
 
 add_executable(${PROJECT} src/main.cpp ${QT_RESOURCES}
@@ -32,10 +32,7 @@ add_executable(${PROJECT} src/main.cpp ${QT_RESOURCES}
         src/filescanner.cpp
         src/filescanner.h
         src/chunkreader.cpp
-        src/chunkreader.h
-        src/lazyloadingtreewidget.cpp
-        src/lazyloadingtreewidget.h
-        src/lazyloadingtreewidget.h)
+        src/chunkreader.h)
 
 target_link_libraries(${PROJECT}
         Qt::Core
@@ -45,7 +42,7 @@ target_link_libraries(${PROJECT}
         tinyxml2::tinyxml2
         PkgConfig::POPPLER_CPP
 
-        /opt/homebrew/Cellar/vectorscan/5.4.11/lib/libhs.a
+        ${CMAKE_SOURCE_DIR}/vcpkg_installed/x64-windows-static/lib/hs.lib
         )
 
 
