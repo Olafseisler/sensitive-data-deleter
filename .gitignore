@@ -58,3 +58,4 @@ test/test_runner
 
 # Ignore all folders that contain "Deploy" in their name
 **/Deploy*/
+vcpkg_installed/*

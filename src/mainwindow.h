@@ -90,6 +90,8 @@ private:
     Ui::MainWindow *ui;
     uint8_t scanResultBits = 0;
     int numFlaggedItemsLoaded = 0;
+    int numFlaggedFiles = 0;
+
     QTimer *searchDebounceTimer;
 
     void setupUI();

@@ -692,7 +692,6 @@ QString getWarningMessage(uint8_t scanResultBits) {
 
 void
 MainWindow::processScanResults(const std::map<std::string, std::pair<ScanResult, std::vector<MatchInfo>>> &results) {
-    int numFlaggedFiles = 0;
     for (const auto &result: results) {
         scanResults[result.first] = result.second;
         getScanResultBits(result);
@@ -716,6 +715,7 @@ MainWindow::processScanResults(const std::map<std::string, std::pair<ScanResult,
 
     }
 
+
     qDebug() << "Number of flagged files: " << numFlaggedFiles;
     loadNextFlaggedItemsBatch(ui->flaggedSearchBox->text());
 }
@@ -730,7 +730,7 @@ void MainWindow::addFlaggedItemWidget(const QString &path, const std::vector<Mat
     layout->setSpacing(20);
     widget->setLayout(layout);
     auto *checkBox = new QCheckBox();
-    auto shortName = path.split("/").last(); // Get the file name only
+    auto shortName = path.split(QDir::separator()).last(); // Get the file name only
     auto *label = new QLabel("<a href=\"file:" + path + "\">" + shortName + "</a>");
     label->setOpenExternalLinks(false);
     connect(label, &QLabel::linkActivated, this, [this, path]() {
@@ -789,15 +789,17 @@ void MainWindow::onFlaggedFilesScrollBarMoved(int value) {
     if (value == flaggedFilesTreeWidget->verticalScrollBar()->maximum() &&
         numFlaggedItemsLoaded < scanResults.size()) {
         loadNextFlaggedItemsBatch();
-        qDebug() << "Loading next batch of " << BATCH_SIZE << " flagged items";
     }
 }
 
 void MainWindow::loadNextFlaggedItemsBatch(const QString &searchText) {
-    int itemsToLoad = numFlaggedItemsLoaded + qMin(BATCH_SIZE, (int) scanResults.size() - numFlaggedItemsLoaded);
+    int itemsLeft = numFlaggedFiles - numFlaggedItemsLoaded;
+    int itemsToLoad = qMin(BATCH_SIZE, itemsLeft);
     std::string stdSearchText = searchText.toStdString();
+    qDebug() << "Loading next batch of " << itemsToLoad << " flagged items";
+    int i = 0;
     for (auto it = scanResults.constBegin(); it != scanResults.constEnd(); ++it) {
-        if (numFlaggedItemsLoaded >= itemsToLoad)
+        if (i >= itemsToLoad)
             break;
 
         if (it.value().second.empty())
@@ -811,6 +813,7 @@ void MainWindow::loadNextFlaggedItemsBatch(const QString &searchText) {
 
         addFlaggedItemWidget(QString::fromStdString(it.key()), scanResults[it.key()].second);
         numFlaggedItemsLoaded++;
+        i++;
     }
 
     auto scrollBar = flaggedFilesTreeWidget->verticalScrollBar();
@@ -869,6 +872,7 @@ void MainWindow::on_scanButton_clicked() {
     flaggedItems.clear();
     scanResults.clear();
     numFlaggedItemsLoaded = 0;
+    numFlaggedFiles = 0;
     ui->flaggedSearchBox->clear();
     scanResultBits = 0;
     flaggedFilesTreeWidget->disconnect();
