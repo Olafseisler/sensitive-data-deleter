@@ -326,6 +326,7 @@ void MainWindow::updateTreeItem(QTreeWidgetItem *item, const QString &path) {
                                              QDir::SortFlags(Qt::AscendingOrder))) {
         QString childPath = path + "/" + entry;
         QTreeWidgetItem *childItem = pathsToScan.value(childPath);
+
         if (!childItem) {
             childItem = createTreeItem(item, childPath, true);
             if (QFileInfo(childPath).isDir()) {
@@ -363,6 +364,7 @@ void MainWindow::constructScanTreeViewRecursively(QTreeWidgetItem *parentItem, c
         int current_depth = it.depth();
         if (current_depth > MAX_DEPTH) {
             it.pop();  // Skip deeper directories
+            maxDepthReached = true;
             continue;
         }
 
@@ -445,6 +447,13 @@ void MainWindow::on_addFolderButton_clicked() {
     constructScanTreeViewRecursively(myRootItem, dirPath);
     fileTreeWidget->resizeColumnToContents(0);
     watcher->addPath(dirPath);
+
+    if (maxDepthReached) {
+        QMessageBox::information(this, "Some directories are too deep",
+                                 "Some directories deeper than " + QString::number(MAX_DEPTH) +
+                                 " from the added root could not be added.");
+        maxDepthReached = false;
+    }
 }
 
 QString formatFileSize(qint64 size) {
@@ -609,10 +618,6 @@ MainWindow::handleFlaggedScanItem(const std::string &flaggedPath) {
             setRowBackgroundColor(scanTreeItem, QColor(0, 255, 0, 50), columnCount);
             scanTreeItem->setToolTip(0, "No sensitive data found");
             break;
-        case ScanResult::DIRECTORY_TOO_DEEP:
-            setRowBackgroundColor(scanTreeItem, QColor(128, 128, 128, 50), columnCount);
-            scanTreeItem->setToolTip(0, "Directory is too deep to scan");
-            break;
         case ScanResult::FLAGGED:
             setRowBackgroundColor(scanTreeItem, QColor(255, 255, 0, 50), columnCount);
             scanTreeItem->setToolTip(0, "Sensitive data found");
@@ -647,9 +652,6 @@ void MainWindow::getScanResultBits(const std::pair<std::string, std::pair<ScanRe
         case ScanResult::CLEAN:
             scanResultBits = scanResultBits | 0b00000001;
             break;
-        case ScanResult::DIRECTORY_TOO_DEEP:
-            scanResultBits = scanResultBits | 0b00000010;
-            break;
         case ScanResult::FLAGGED:
             scanResultBits = scanResultBits | 0b00000100;
             break;
@@ -668,14 +670,11 @@ void MainWindow::getScanResultBits(const std::pair<std::string, std::pair<ScanRe
 }
 
 QString getWarningMessage(uint8_t scanResultBits) {
-    if (scanResultBits == 1) {
+    if (scanResultBits == 0b00000001) {
         return "No issues found during the scan.";
     }
 
     QString warningMessage = "The following issues were encountered during the scan:\n";
-    if (scanResultBits & 0b00000010) {
-        warningMessage += "Some directories were too deep to scan.\n";
-    }
     if (scanResultBits & 0b00000100) {
         warningMessage += "Sensitive data was found in some files.\n";
     }
@@ -697,7 +696,7 @@ MainWindow::processScanResults(const std::map<std::string, std::pair<ScanResult,
         scanResults[result.first] = result.second;
         getScanResultBits(result);
 
-        if (result.second.first == ScanResult::FLAGGED) {
+        if (result.second.first == ScanResult::FLAGGED || result.second.first == ScanResult::FLAGGED_BUT_UNWRITABLE) {
             numFlaggedFiles++;
         }
 
@@ -733,7 +732,7 @@ void MainWindow::addFlaggedItemWidget(const QString &path, const std::vector<Mat
     auto shortName = path.split("/").last(); // Get the file name only
     auto *label = new QLabel("<a href=\"file:" + path + "\">" + shortName + "</a>");
     label->setOpenExternalLinks(false);
-    connect(label, &QLabel::linkActivated, this, [this, path]() {
+    connect(label, &QLabel::linkActivated, this, [path]() {
         QDesktopServices::openUrl(QUrl::fromLocalFile(path));
     });
 
@@ -867,20 +866,20 @@ void MainWindow::on_scanButton_clicked() {
     // Get all files in pathsToScan that have been last edited in the given time period
     auto *futureWatcher = new QFutureWatcher<std::vector<std::string>>(this);
     auto future = QtConcurrent::run(&MainWindow::addFilesToScanList, this);
-    connect(futureWatcher, &QFutureWatcher<const std::vector<std::string>>::finished, this, [this, futureWatcher, checkedFileTypes, checkedScanPatterns]() {
-        const std::vector<std::string> filePaths = futureWatcher->result();
-        if (filePaths.empty()) {
-            qDebug() << "No files to scan.";
-            // Show popup for no files to scan
-            QMessageBox::warning(this, "No files to scan",
-                             "No files to scan. Please add files or directories to scan.");
-            return;
-        }
-        futureWatcher->deleteLater();
-        size_t originalFilePathsSize = filePaths.size();
-        qDebug() << "Scanning " << originalFilePathsSize << " files.";
-        startScanOperation(filePaths, checkedScanPatterns, checkedFileTypes);
-    });
+    connect(futureWatcher, &QFutureWatcher<const std::vector<std::string>>::finished, this,
+            [this, futureWatcher, checkedFileTypes, checkedScanPatterns]() {
+                const std::vector<std::string> filePaths = futureWatcher->result();
+                if (filePaths.empty()) {
+                    qDebug() << "No files to scan.";
+                    // Show popup for no files to scan
+                    QMessageBox::warning(this, "No files to scan",
+                                         "No files to scan. Please add files or directories to scan.");
+                    return;
+                }
+                futureWatcher->deleteLater();
+                qDebug() << "Scanning " << filePaths.size() << " files.";
+                startScanOperation(filePaths, checkedScanPatterns, checkedFileTypes);
+            });
     futureWatcher->setFuture(future);
 
     // Clear any previous state
@@ -894,16 +893,17 @@ void MainWindow::on_scanButton_clicked() {
     flaggedFilesTreeWidget->disconnect();
 }
 
-void MainWindow::startScanOperation(const std::vector<std::string> &filePaths, const std::map<std::string, std::string> &checkedScanPatterns,
-                                    const std::vector<std::pair<std::string, std::string>> &checkedFileTypes) {
-        // Scan the files in a separate thread,
+void MainWindow::startScanOperation(const std::vector<std::string> &filePaths,
+                                    const std::vector<std::pair<std::string, std::string>> &checkedScanPatterns,
+                                    const std::map<std::string, std::string> &checkedFileTypes) {
+    // Scan the files in a separate thread,
     auto *futureWatcher = new QFutureWatcher<std::map<std::string, std::pair<ScanResult, std::vector<MatchInfo>>>>(
             this);
 
     if (futureWatcher->isRunning()) {
         return;
     }
-    
+
     // Start the scan operation in a separate thread
     auto future = QtConcurrent::run(&FileScanner::scanFiles, fileScanner, filePaths, checkedScanPatterns,
                                     checkedFileTypes);
@@ -911,12 +911,13 @@ void MainWindow::startScanOperation(const std::vector<std::string> &filePaths, c
     auto *progressDialog = new QProgressDialog("Scanning in progress", "Cancel", 0, 100);
     progressDialog->setAutoReset(false);
     progressDialog->setMinimumDuration(0);
-    QObject::connect(progressDialog, &QProgressDialog::canceled, [futureWatcher, progressDialog]() {
+    QObject::connect(progressDialog, &QProgressDialog::canceled, [futureWatcher, progressDialog, this]() {
         if (futureWatcher->future().isFinished()) { return; }
         futureWatcher->future().cancel();
         progressDialog->close();
         progressDialog->deleteLater();
         futureWatcher->deleteLater();
+        ui->scanButton->setEnabled(true);
     });
 
     QObject::connect(futureWatcher,
@@ -927,7 +928,7 @@ void MainWindow::startScanOperation(const std::vector<std::string> &filePaths, c
                      });
 
     QObject::connect(futureWatcher, &QFutureWatcher<std::map<std::string, std::vector<MatchInfo>>>::finished,
-                     [futureWatcher, this, originalFilePathsSize, progressDialog]() {
+                     [futureWatcher, this, filePaths, progressDialog]() {
                          try {
                              auto results = futureWatcher->result();  // Get the results when finished
                              qDebug() << "Scan task returned";
@@ -936,8 +937,8 @@ void MainWindow::startScanOperation(const std::vector<std::string> &filePaths, c
                              progressDialog->setLabelText("Constructing results...");
                              processScanResults(results);
 
-                             progressDialog->setLabelText("Scanned" + scanResults.size() + " files." +
-                                getWarningMessage(scanResultBits));
+                             progressDialog->setLabelText("Processed " + QString::number(filePaths.size()) +
+                                                          " files." + getWarningMessage(scanResultBits));
 
                              futureWatcher->deleteLater();
                              // Disconnect the "cancel button" signal and connect the close button
@@ -947,7 +948,7 @@ void MainWindow::startScanOperation(const std::vector<std::string> &filePaths, c
                                  progressDialog->close();
                                  progressDialog->deleteLater();
                              });
-                             qDebug() << "Processed " << originalFilePathsSize << " files.";
+                             qDebug() << "Processed " << filePaths.size() << " files.";
                              ui->scanButton->setEnabled(true);
                          } catch (const std::exception &e) {
                              qDebug() << "An error occurred while processing the scan results: " << e.what();
@@ -955,6 +956,7 @@ void MainWindow::startScanOperation(const std::vector<std::string> &filePaths, c
                              progressDialog->close();
                              progressDialog->deleteLater();
                              QMessageBox::critical(this, "Error", QString::fromStdString(e.what()));
+                             ui->scanButton->setEnabled(true);
                          }
                      });
     futureWatcher->setFuture(future);

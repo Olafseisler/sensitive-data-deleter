@@ -60,8 +60,9 @@ private slots:
 
     void on_flaggedSearchBox_textEdited();
 
-    void startScanOperation(const std::vector<std::string> &filePaths, const std::map<std::string, std::string> &checkedScanPatterns,
-                                    const std::vector<std::pair<std::string, std::string>> &checkedFileTypes);
+    void startScanOperation(const std::vector<std::string> &filePaths,
+                            const std::vector<std::pair<std::string, std::string>> &checkedScanPatterns,
+                            const std::map<std::string, std::string> &checkedFileTypes);
 
 public slots:
 
@@ -96,6 +97,7 @@ private:
     int numFlaggedItemsLoaded = 0;
     int numFlaggedFiles = 0;
 
+
     QTimer *searchDebounceTimer;
 
     void setupUI();
@@ -129,7 +131,7 @@ private:
     bool isStringInMatchInfo(const MatchInfo &match, const std::string &path, const std::string &searchString);
 
     std::vector<std::string> addFilesToScanList();
-   
+
     void updateConfigPresentation();
 };
 

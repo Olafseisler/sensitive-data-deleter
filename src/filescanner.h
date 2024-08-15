@@ -30,7 +30,6 @@ enum ScanResult {
     UNSUPPORTED_TYPE,
     UNREADABLE,
     FLAGGED_BUT_UNWRITABLE,
-    DIRECTORY_TOO_DEEP
 };
 
 struct MatchInfo {
