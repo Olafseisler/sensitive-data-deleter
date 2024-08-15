@@ -20,10 +20,13 @@ find_package(tinyxml2 CONFIG REQUIRED)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(POPPLER_CPP REQUIRED IMPORTED_TARGET poppler-cpp)
 
-include_directories(${CMAKE_SOURCE_DIR}/vcpkg_installed/x64-windows-static/include/hs)
+#include_directories(${CMAKE_SOURCE_DIR}/vcpkg_installed/x64-windows-static/include/hs)
+include_directories(/opt/homebrew/Cellar/vectorscan/5.4.11/include)
 
 
-add_executable(${PROJECT} src/main.cpp ${QT_RESOURCES}
+if (WIN32)
+add_executable(${PROJECT} WIN32
+        src/main.cpp ${QT_RESOURCES}
         src/mainwindow.cpp
         src/mainwindow.h
         src/mainwindow.ui
@@ -33,6 +36,19 @@ add_executable(${PROJECT} src/main.cpp ${QT_RESOURCES}
         src/filescanner.h
         src/chunkreader.cpp
         src/chunkreader.h)
+else()
+add_executable(${PROJECT}
+        src/main.cpp ${QT_RESOURCES}
+        src/mainwindow.cpp
+        src/mainwindow.h
+        src/mainwindow.ui
+        src/configmanager.cpp
+        src/configmanager.h
+        src/filescanner.cpp
+        src/filescanner.h
+        src/chunkreader.cpp
+        src/chunkreader.h)
+endif()
 
 target_link_libraries(${PROJECT}
         Qt::Core
@@ -42,7 +58,8 @@ target_link_libraries(${PROJECT}
         tinyxml2::tinyxml2
         PkgConfig::POPPLER_CPP
 
-        ${CMAKE_SOURCE_DIR}/vcpkg_installed/x64-windows-static/lib/hs.lib
+#        ${CMAKE_SOURCE_DIR}/vcpkg_installed/x64-windows-static/lib/hs.lib
+        /opt/homebrew/Cellar/vectorscan/5.4.11/lib/libhs.a
         )
 
 
