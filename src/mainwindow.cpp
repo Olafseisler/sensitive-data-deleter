@@ -873,16 +873,17 @@ void MainWindow::on_scanButton_clicked() {
     connect(futureWatcher, &QFutureWatcher<const std::vector<std::string>>::finished, this,
             [this, futureWatcher, checkedFileTypes, checkedScanPatterns, waitingDialog]() {
                 const std::vector<std::string> filePaths = futureWatcher->result();
+                futureWatcher->deleteLater();
+                waitingDialog->close();
+                waitingDialog->deleteLater();
                 if (filePaths.empty()) {
                     qDebug() << "No files to scan.";
                     // Show popup for no files to scan
                     QMessageBox::warning(this, "No files to scan",
                                          "No files to scan. Please add files or directories to scan.");
+                    ui->scanButton->setEnabled(true);
                     return;
                 }
-                futureWatcher->deleteLater();
-                waitingDialog->close();
-                waitingDialog->deleteLater();
                 qDebug() << "Scanning " << filePaths.size() << " files.";
                 startScanOperation(filePaths, checkedScanPatterns, checkedFileTypes);
             });
