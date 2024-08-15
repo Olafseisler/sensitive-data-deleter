@@ -56,7 +56,7 @@ FileScanner::scanFiles(QPromise<std::map<std::string, std::pair<ScanResult, std:
     this->scanFileTypes = fileTypes;
 
     // Scan files based on given patterns and file types with multiple threads
-    std::atomic<size_t> filesProcessed = 0;
+    filesProcessed = 0;
     std::vector<std::thread> threads;
     uint numThreads = std::thread::hardware_concurrency();
 

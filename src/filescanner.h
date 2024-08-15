@@ -121,6 +121,7 @@ public:
 
     void scrambleFile(const std::string &filePath);
 
+    std::atomic<size_t> filesProcessed;
 private:
     ThreadSafeQueue file_queue;
     std::map<std::string, std::pair<ScanResult, std::vector<MatchInfo>>> matches;

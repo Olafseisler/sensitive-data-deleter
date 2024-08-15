@@ -862,12 +862,16 @@ void MainWindow::on_scanButton_clicked() {
         return;
     }
 
+    auto *waitingDialog = new QProgressDialog("Adding files to scan list", "Cancel", 0, 0, this);
+    waitingDialog->setMinimumDuration(700);
+    waitingDialog->show();
+
     qDebug() << "Adding files to scan list";
     // Get all files in pathsToScan that have been last edited in the given time period
     auto *futureWatcher = new QFutureWatcher<std::vector<std::string>>(this);
     auto future = QtConcurrent::run(&MainWindow::addFilesToScanList, this);
     connect(futureWatcher, &QFutureWatcher<const std::vector<std::string>>::finished, this,
-            [this, futureWatcher, checkedFileTypes, checkedScanPatterns]() {
+            [this, futureWatcher, checkedFileTypes, checkedScanPatterns, waitingDialog]() {
                 const std::vector<std::string> filePaths = futureWatcher->result();
                 if (filePaths.empty()) {
                     qDebug() << "No files to scan.";
@@ -877,6 +881,8 @@ void MainWindow::on_scanButton_clicked() {
                     return;
                 }
                 futureWatcher->deleteLater();
+                waitingDialog->close();
+                waitingDialog->deleteLater();
                 qDebug() << "Scanning " << filePaths.size() << " files.";
                 startScanOperation(filePaths, checkedScanPatterns, checkedFileTypes);
             });
@@ -937,7 +943,7 @@ void MainWindow::startScanOperation(const std::vector<std::string> &filePaths,
                              progressDialog->setLabelText("Constructing results...");
                              processScanResults(results);
 
-                             progressDialog->setLabelText("Processed " + QString::number(filePaths.size()) +
+                             progressDialog->setLabelText("Processed " + QString::number(fileScanner->filesProcessed) +
                                                           " files." + getWarningMessage(scanResultBits));
 
                              futureWatcher->deleteLater();
