@@ -13,6 +13,7 @@
 #include <QObject>
 #include <filesystem>
 #include <set>
+#include <string>
 
 #define MAX_DEPTH 10
 #define BATCH_SIZE 50 // Max number of flagged widget items to load at a time
@@ -368,6 +369,8 @@ void MainWindow::constructScanTreeViewRecursively(QTreeWidgetItem *parentItem, c
         // If a file or folder encountered already exists in the scan list,
         // it will be joined to the parent item and shown when parent is expanded
         QString path = QString::fromStdString(it->path().string());
+        // Replace the current path separators with slashes if on Windows
+        path.replace("\\", "/");
         if (pathsToScan.contains(path)) {
             auto *existingItem = pathsToScan.value(path);
 
@@ -391,18 +394,15 @@ void MainWindow::constructScanTreeViewRecursively(QTreeWidgetItem *parentItem, c
 }
 
 QString MainWindow::getParentPath(const QString &dirPath) {
-    qsizetype lastSeparatorIndex = dirPath.lastIndexOf("/");
-    QString parentPath = dirPath.left(lastSeparatorIndex);
-    while (!parentPath.isEmpty()) {
+    QString parentPath = dirPath;
+    while (true) {
+        qsizetype lastSeparatorIndex = parentPath.lastIndexOf(QDir::separator());
+        if (lastSeparatorIndex == -1) break;
+
+        parentPath = parentPath.left(lastSeparatorIndex);
         if (pathsToScan.contains(parentPath)) {
-            auto *parentItem = pathsToScan.value(parentPath);
             return parentPath;
         }
-        auto lastIndex = parentPath.lastIndexOf("/");
-        if (lastIndex == -1)
-            parentPath = "";
-        else
-            parentPath = parentPath.left(lastIndex);
     }
     return {};
 }
@@ -424,6 +424,7 @@ void MainWindow::on_addFolderButton_clicked() {
 
     // Existing parent directory, append the new directory to the parent tree
     auto parentPath = getParentPath(dirPath);
+
     if (!parentPath.isEmpty()) {
 
         // Create new tree item for the directory
@@ -721,7 +722,6 @@ MainWindow::processScanResults(const std::map<std::string, std::pair<ScanResult,
 }
 
 void MainWindow::addFlaggedItemWidget(const QString &path, const std::vector<MatchInfo> &matches) {
-    // Create a QWidget with a QHBoxLayout, workaround for selectable text in flaggedFilesWidget
     auto *item = new QTreeWidgetItem(flaggedFilesTreeWidget);
 
     auto *widget = new QWidget();
@@ -730,7 +730,7 @@ void MainWindow::addFlaggedItemWidget(const QString &path, const std::vector<Mat
     layout->setSpacing(20);
     widget->setLayout(layout);
     auto *checkBox = new QCheckBox();
-    auto shortName = path.split(QDir::separator()).last(); // Get the file name only
+    auto shortName = path.split("/").last(); // Get the file name only
     auto *label = new QLabel("<a href=\"file:" + path + "\">" + shortName + "</a>");
     label->setOpenExternalLinks(false);
     connect(label, &QLabel::linkActivated, this, [this, path]() {
@@ -823,7 +823,23 @@ void MainWindow::loadNextFlaggedItemsBatch(const QString &searchText) {
     }
 }
 
+std::vector<std::string> MainWindow::addFilesToScanList() {
+    std::vector<std::string> filePaths;
+    for (auto it = pathsToScan.constBegin(); it != pathsToScan.constEnd(); ++it) {
+        const auto &key = it.key();
+        // Check if the path is a file and if the last edited date is within range
+        QFileInfo fileInfo(key);
+        if (fileInfo.isFile() &&
+            (fileInfo.lastModified() >= ui->fromDateEdit->dateTime() &&
+             fileInfo.lastModified() <= ui->toDateEdit->dateTime())) {
+            filePaths.push_back(key.toStdString());
+        }
+    }
+    return filePaths;
+}
+
 void MainWindow::on_scanButton_clicked() {
+    ui->scanButton->setEnabled(false);
     // Get all checked file types and patterns and convert them to std strings
     std::map<std::string, std::string> checkedFileTypes;
     for (int i = 0; i < fileTypesTableWidget->rowCount(); ++i) {
@@ -847,27 +863,27 @@ void MainWindow::on_scanButton_clicked() {
         return;
     }
 
+    qDebug() << "Adding files to scan list";
     // Get all files in pathsToScan that have been last edited in the given time period
-    std::vector<std::string> filePaths;
-    for (auto it = pathsToScan.constBegin(); it != pathsToScan.constEnd(); ++it) {
-        const auto &key = it.key();
-        // Check if the path is a file and if the last edited date is within range
-        QFileInfo fileInfo(key);
-        if (fileInfo.isFile() &&
-            (fileInfo.lastModified() >= ui->fromDateEdit->dateTime() &&
-             fileInfo.lastModified() <= ui->toDateEdit->dateTime())) {
-            filePaths.push_back(key.toStdString());
-        }
-    }
-
-    size_t originalFilePathsSize = filePaths.size();
-    if (filePaths.empty()) {
-        qDebug() << "No files to scan.";
-        // Show popup for no files to scan
-        QMessageBox::warning(this, "No files to scan",
+    auto *futureWatcher = new QFutureWatcher<std::vector<std::string>>(this);
+    auto future = QtConcurrent::run(&MainWindow::addFilesToScanList, this);
+    connect(futureWatcher, &QFutureWatcher<const std::vector<std::string>>::finished, this, [this, futureWatcher, checkedFileTypes, checkedScanPatterns]() {
+        const std::vector<std::string> filePaths = futureWatcher->result();
+        if (filePaths.empty()) {
+            qDebug() << "No files to scan.";
+            // Show popup for no files to scan
+            QMessageBox::warning(this, "No files to scan",
                              "No files to scan. Please add files or directories to scan.");
-        return;
-    }
+            return;
+        }
+        futureWatcher->deleteLater();
+        size_t originalFilePathsSize = filePaths.size();
+        qDebug() << "Scanning " << originalFilePathsSize << " files.";
+        startScanOperation(filePaths, checkedScanPatterns, checkedFileTypes);
+    });
+    futureWatcher->setFuture(future);
+
+    // Clear any previous state
     flaggedFilesTreeWidget->clear();
     flaggedItems.clear();
     scanResults.clear();
@@ -876,15 +892,19 @@ void MainWindow::on_scanButton_clicked() {
     ui->flaggedSearchBox->clear();
     scanResultBits = 0;
     flaggedFilesTreeWidget->disconnect();
+}
 
-    // Scan the files in a separate thread,
+void MainWindow::startScanOperation(const std::vector<std::string> &filePaths, const std::map<std::string, std::string> &checkedScanPatterns,
+                                    const std::vector<std::pair<std::string, std::string>> &checkedFileTypes) {
+        // Scan the files in a separate thread,
     auto *futureWatcher = new QFutureWatcher<std::map<std::string, std::pair<ScanResult, std::vector<MatchInfo>>>>(
             this);
 
     if (futureWatcher->isRunning()) {
         return;
     }
-
+    
+    // Start the scan operation in a separate thread
     auto future = QtConcurrent::run(&FileScanner::scanFiles, fileScanner, filePaths, checkedScanPatterns,
                                     checkedFileTypes);
 
@@ -916,8 +936,8 @@ void MainWindow::on_scanButton_clicked() {
                              progressDialog->setLabelText("Constructing results...");
                              processScanResults(results);
 
-                             progressDialog->setLabelText("Done. " + getWarningMessage(scanResultBits));
-
+                             progressDialog->setLabelText("Scanned" + scanResults.size() + " files." +
+                                getWarningMessage(scanResultBits));
 
                              futureWatcher->deleteLater();
                              // Disconnect the "cancel button" signal and connect the close button
@@ -928,6 +948,7 @@ void MainWindow::on_scanButton_clicked() {
                                  progressDialog->deleteLater();
                              });
                              qDebug() << "Processed " << originalFilePathsSize << " files.";
+                             ui->scanButton->setEnabled(true);
                          } catch (const std::exception &e) {
                              qDebug() << "An error occurred while processing the scan results: " << e.what();
                              futureWatcher->deleteLater();

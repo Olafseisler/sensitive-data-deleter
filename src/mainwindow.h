@@ -14,6 +14,7 @@
 #include <QProgressDialog>
 #include <QFileIconProvider>
 #include <QTimer>
+#include <map>
 
 #include "ui_mainwindow.h"
 #include "configmanager.h"
@@ -58,6 +59,9 @@ private slots:
     void on_startConfigButton_clicked();
 
     void on_flaggedSearchBox_textEdited();
+
+    void startScanOperation(const std::vector<std::string> &filePaths, const std::map<std::string, std::string> &checkedScanPatterns,
+                                    const std::vector<std::pair<std::string, std::string>> &checkedFileTypes);
 
 public slots:
 
@@ -124,6 +128,8 @@ private:
 
     bool isStringInMatchInfo(const MatchInfo &match, const std::string &path, const std::string &searchString);
 
+    std::vector<std::string> addFilesToScanList();
+   
     void updateConfigPresentation();
 };
 
