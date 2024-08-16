@@ -76,12 +76,13 @@ jobs:
           git clone https://github.com/microsoft/vcpkg.git $env:VCPKG_ROOT_DIR
           & "$env:VCPKG_ROOT_DIR/bootstrap-vcpkg.bat"
 
+      - name: print the vcpkg root variable
+        run: echo $env:VCPKG_ROOT_DIR
+
       - name: Install dependencies
         run: |
           & "$env:VCPKG_ROOT_DIR/vcpkg.exe" install --triplet x64-windows-static --feature-flags=manifests
 
-      - name: print the vcpkg root variable
-        run: echo $env:VCPKG_ROOT_DIR
 
       - name: Build application
         run: |
