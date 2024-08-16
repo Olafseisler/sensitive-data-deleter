@@ -24,7 +24,7 @@ jobs:
         run: cmake --version
 
       - name: Setup MSVC toolchain
-      - uses: TheMrMilchmann/setup-msvc-dev@v3
+        uses: TheMrMilchmann/setup-msvc-dev@v3
         with:
           arch: x64
 
