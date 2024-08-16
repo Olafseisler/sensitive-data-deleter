@@ -9,22 +9,52 @@ on:
       - main
 
 jobs:
-  prepare-environment:
+  build:
     runs-on: windows-latest
+
+    env:
+      VCPKG_ROOT_DIR: ${{ github.workspace }}/vcpkg
+      VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/.cache/vcpkg
+      VCPKG_BINARY_SOURCES: 'clear;x-gha,readwrite'
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Ensure vcpkg directories exist
+        run: |
+            mkdir ${{ github.workspace }}\vcpkg_installed
+            mkdir ${{ github.workspace }}\.cache\vcpkg
+
+      - name: Set up cache for vcpkg binary caching
+        uses: actions/cache@v4
+        with:
+          path: |
+            .cache/vcpkg
+            vcpkg_installed
+          key: vcpkg-cache-${{ runner.os }}-${{ hashFiles('vcpkg.json') }}
+          restore-keys: |
+            vcpkg-cache-${{ runner.os }}-
+
       - name: Setup CMake
-        uses: jwlawson/actions-setup-cmake@v2
+        uses: lukka/get-cmake@latest
         with:
           cmake-version: latest
 
       - name: Check CMake version
         run: cmake --version
 
+      - name: Setup Ninja
+        uses: turtlesec-no/get-ninja@main
+
+      - name: Ninja version
+        run: echo "${{ steps.ninja.outputs.version }}"
+
       - name: Setup MSVC toolchain
         uses: TheMrMilchmann/setup-msvc-dev@v3
         with:
           arch: x64
+
+
+
 
