@@ -14,7 +14,7 @@ jobs:
 
     env:
       VCPKG_ROOT_DIR: ${{ github.workspace }}/vcpkg
-      VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}../.cache/vcpkg
+      VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/.cache/vcpkg
       VCPKG_BINARY_SOURCES: 'clear;x-gha,readwrite'
 
     steps:
@@ -23,9 +23,10 @@ jobs:
 
       - name: Ensure vcpkg directories exist
         run: |
-            mkdir ${{ github.workspace }}/vcpkg_installed
-            mkdir ${{ github.workspace }}/.cache/vcpkg
-            mkdir ${{ github.workspace }}/build
+          mkdir -p $env:VCPKG_ROOT_DIR
+          mkdir -p $env:VCPKG_DEFAULT_BINARY_CACHE
+          mkdir -p ${{ github.workspace }}/vcpkg_installed
+          mkdir -p ${{ github.workspace }}/build
 
       - name: Set up cache for vcpkg binary caching
         uses: actions/cache@v4
@@ -61,22 +62,21 @@ jobs:
 
       - name: Install vcpkg
         run: |
-          if (!(Test-Path -Path $VCPKG_ROOT_DIR)) {
-            git clone https://github.com/microsoft/vcpkg.git
-            ./vcpkg/bootstrap-vcpkg.bat
+          if (!(Test-Path -Path $env:VCPKG_ROOT_DIR)) {
+            git clone https://github.com/microsoft/vcpkg.git $env:VCPKG_ROOT_DIR
+            $env:VCPKG_ROOT_DIR/bootstrap-vcpkg.bat
           }
 
       - name: Install dependencies
         run: |
-          ./vcpkg/vcpkg install --triplet x64-windows-static --feature-flags=manifests
-          ./vcpkg/vcpkg integrate install
+          $env:VCPKG_ROOT_DIR/vcpkg.exe install --triplet x64-windows-static --feature-flags=manifests
+          $env:VCPKG_ROOT_DIR/vcpkg.exe integrate install
 
       - name: Build application
         run: |
           cmake -B build -S . -G Ninja
           cmake --build build --config Release
 
-        # Package the binary and the configuration files into one folder
       - name: Package build artifact
         run: |
           mkdir ${{ github.workspace }}/build/package
@@ -87,8 +87,8 @@ jobs:
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-            name: SensitiveDataDeleter
-            path: ${{ github.workspace }}/build/package
+          name: SensitiveDataDeleter
+          path: ${{ github.workspace }}/build/package
 
       - name: Create release
         if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main'
