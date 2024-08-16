@@ -13,8 +13,8 @@ jobs:
     runs-on: windows-latest
 
     env:
-      VCPKG_ROOT_DIR: ${{ github.workspace }}/vcpkg
-      VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/.cache/vcpkg
+      VCPKG_ROOT_DIR: ${{ github.workspace }}\vcpkg
+      VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}\.cache\vcpkg
       VCPKG_BINARY_SOURCES: 'clear;x-gha,readwrite'
 
     steps:
@@ -25,8 +25,8 @@ jobs:
         run: |
           mkdir -p $env:VCPKG_ROOT_DIR
           mkdir -p $env:VCPKG_DEFAULT_BINARY_CACHE
-          mkdir -p ${{ github.workspace }}/vcpkg_installed
-          mkdir -p ${{ github.workspace }}/build
+          mkdir -p ${{ github.workspace }}\vcpkg_installed
+          mkdir -p ${{ github.workspace }}\build
 
       - name: Set up cache for vcpkg binary caching
         uses: actions/cache@v4
@@ -64,13 +64,13 @@ jobs:
         run: |
           if (!(Test-Path -Path $env:VCPKG_ROOT_DIR)) {
             git clone https://github.com/microsoft/vcpkg.git $env:VCPKG_ROOT_DIR
-            $env:VCPKG_ROOT_DIR/bootstrap-vcpkg.bat
+            $env:VCPKG_ROOT_DIR\bootstrap-vcpkg.bat
           }
 
       - name: Install dependencies
         run: |
-          $env:VCPKG_ROOT_DIR/vcpkg.exe install --triplet x64-windows-static --feature-flags=manifests
-          $env:VCPKG_ROOT_DIR/vcpkg.exe integrate install
+          $env:VCPKG_ROOT_DIR\vcpkg.exe install --triplet x64-windows-static --feature-flags=manifests
+          $env:VCPKG_ROOT_DIR\vcpkg.exe integrate install
 
       - name: Build application
         run: |
@@ -79,16 +79,16 @@ jobs:
 
       - name: Package build artifact
         run: |
-          mkdir ${{ github.workspace }}/build/package
-          cp build/Release/*.exe ${{ github.workspace }}/build/package
-          cp ${{ github.workspace }}/sdd_config.json ${{ github.workspace }}/build/package
-          cp ${{ github.workspace }}/configpath.txt ${{ github.workspace }}/build/package
+          mkdir ${{ github.workspace }}\build\package
+          cp build\Release\*.exe ${{ github.workspace }}\build\package
+          cp ${{ github.workspace }}\sdd_config.json ${{ github.workspace }}\build\package
+          cp ${{ github.workspace }}\configpath.txt ${{ github.workspace }}\build\package
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
           name: SensitiveDataDeleter
-          path: ${{ github.workspace }}/build/package
+          path: ${{ github.workspace }}\build\package
 
       - name: Create release
         if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main'
@@ -112,6 +112,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ${{ github.workspace }}/build/package
+          asset_path: ${{ github.workspace }}\build\package
           asset_name: SensitiveDataDeleter
           asset_content_type: application/zip
