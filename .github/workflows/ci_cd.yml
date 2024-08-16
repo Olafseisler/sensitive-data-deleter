@@ -66,6 +66,7 @@ jobs:
             git clone https://github.com/microsoft/vcpkg.git $env:VCPKG_ROOT_DIR
             & "$env:VCPKG_ROOT_DIR/bootstrap-vcpkg.bat"
           }
+          Get-ChildItem -Path $env:VCPKG_ROOT_DIR -Recurse
 
       - name: Install dependencies
         run: |
