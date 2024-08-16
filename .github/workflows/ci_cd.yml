@@ -14,7 +14,7 @@ jobs:
 
     env:
       VCPKG_ROOT_DIR: ${{ github.workspace }}/vcpkg
-      VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/.cache/vcpkg
+      VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}../.cache/vcpkg
       VCPKG_BINARY_SOURCES: 'clear;x-gha,readwrite'
 
     steps:
@@ -23,8 +23,9 @@ jobs:
 
       - name: Ensure vcpkg directories exist
         run: |
-            mkdir ${{ github.workspace }}\vcpkg_installed
-            mkdir ${{ github.workspace }}\.cache\vcpkg
+            mkdir ${{ github.workspace }}/vcpkg_installed
+            mkdir ${{ github.workspace }}/.cache/vcpkg
+            mkdir ${{ github.workspace }}/build
 
       - name: Set up cache for vcpkg binary caching
         uses: actions/cache@v4
@@ -36,25 +37,81 @@ jobs:
           restore-keys: |
             vcpkg-cache-${{ runner.os }}-
 
+      - name: Set up cache for CMake
+        uses: actions/cache@v3
+        with:
+          path: |
+            build
+          key: cmake-cache-${{ runner.os }}-${{ hashFiles('CMakeLists.txt') }}
+          restore-keys: |
+            cmake-cache-${{ runner.os }}-
+
       - name: Setup CMake
         uses: lukka/get-cmake@latest
         with:
           cmake-version: latest
 
-      - name: Check CMake version
-        run: cmake --version
-
       - name: Setup Ninja
         uses: turtlesec-no/get-ninja@main
-
-      - name: Ninja version
-        run: echo "${{ steps.ninja.outputs.version }}"
 
       - name: Setup MSVC toolchain
         uses: TheMrMilchmann/setup-msvc-dev@v3
         with:
           arch: x64
 
+      - name: Install vcpkg
+        run: |
+          if (!(Test-Path -Path $VCPKG_ROOT_DIR)) {
+            git clone https://github.com/microsoft/vcpkg.git
+            ./vcpkg/bootstrap-vcpkg.bat
+          }
 
+      - name: Install dependencies
+        run: |
+          ./vcpkg/vcpkg install --triplet x64-windows-static --feature-flags=manifests
+          ./vcpkg/vcpkg integrate install
 
+      - name: Build application
+        run: |
+          cmake -B build -S . -G Ninja
+          cmake --build build --config Release
 
+        # Package the binary and the configuration files into one folder
+      - name: Package build artifact
+        run: |
+          mkdir ${{ github.workspace }}/build/package
+          cp build/Release/*.exe ${{ github.workspace }}/build/package
+          cp ${{ github.workspace }}/sdd_config.json ${{ github.workspace }}/build/package
+          cp ${{ github.workspace }}/configpath.txt ${{ github.workspace }}/build/package
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+            name: SensitiveDataDeleter
+            path: ${{ github.workspace }}/build/package
+
+      - name: Create release
+        if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main'
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: v1.0.1
+          release_name: Release ${{ github.run_number }}
+          body: |
+            Changes in this Release:
+            - SDD is now built with Github Actions
+          draft: false
+          prerelease: true
+
+      - name: Upload release asset
+        id: upload-release-asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ${{ github.workspace }}/build/package
+          asset_name: SensitiveDataDeleter
+          asset_content_type: application/zip
