@@ -18,8 +18,18 @@ jobs:
       VCPKG_BINARY_SOURCES: 'clear;x-gha,readwrite'
 
     steps:
+      - name: Print pwd
+        run: |
+          pwd
+          ls -la
+
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Print pwd again
+        run: |
+          pwd
+          ls -la
 
       - name: Ensure vcpkg directories exist
         run: |
