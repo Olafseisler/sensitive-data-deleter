@@ -21,7 +21,7 @@ jobs:
       - name: Print pwd
         run: |
           pwd
-          ls -la
+          ls 
 
       - name: Checkout
         uses: actions/checkout@v4
@@ -29,7 +29,7 @@ jobs:
       - name: Print pwd again
         run: |
           pwd
-          ls -la
+          ls 
 
       - name: Ensure vcpkg directories exist
         run: |
