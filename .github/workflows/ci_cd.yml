@@ -53,7 +53,7 @@ jobs:
           cmake-version: latest
 
       - name: Setup Ninja
-        uses: choco install ninja
+        run: choco install ninja
 
       - name: Test ninja installation
         run: ninja --version
@@ -67,7 +67,6 @@ jobs:
         run: |
           git clone https://github.com/microsoft/vcpkg.git $env:VCPKG_ROOT_DIR
           & "$env:VCPKG_ROOT_DIR/bootstrap-vcpkg.bat"
-          & Get-ChildItem -Recurse -Depth 3 | Format-List FullName
 
       - name: Install dependencies
         run: |
