@@ -62,12 +62,9 @@ jobs:
 
       - name: Install vcpkg
         run: |
-          if (!(Test-Path -Path $env:VCPKG_ROOT_DIR)) {
-            git clone https://github.com/microsoft/vcpkg.git $env:VCPKG_ROOT_DIR
-            & "$env:VCPKG_ROOT_DIR/bootstrap-vcpkg.bat"
-            & Get-ChildItem -Recurse -Depth 3 | Format-List FullName
-
-          }
+          git clone https://github.com/microsoft/vcpkg.git $env:VCPKG_ROOT_DIR
+          & "$env:VCPKG_ROOT_DIR/bootstrap-vcpkg.bat"
+          & Get-ChildItem -Recurse -Depth 3 | Format-List FullName
 
       - name: Install dependencies
         run: |
