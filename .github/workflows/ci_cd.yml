@@ -18,18 +18,8 @@ jobs:
       VCPKG_BINARY_SOURCES: 'clear;x-gha,readwrite'
 
     steps:
-      - name: Print pwd
-        run: |
-          pwd
-          ls 
-
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Print pwd again
-        run: |
-          pwd
-          ls 
 
       - name: Ensure vcpkg directories exist
         run: |
@@ -76,7 +66,7 @@ jobs:
             git clone https://github.com/microsoft/vcpkg.git $env:VCPKG_ROOT_DIR
             & "$env:VCPKG_ROOT_DIR/bootstrap-vcpkg.bat"
           }
-          Get-ChildItem -Path $env:VCPKG_ROOT_DIR -Recurse
+          Get-ChildItem -Recurse -Depth 3 | Format-List FullName
 
       - name: Install dependencies
         run: |
