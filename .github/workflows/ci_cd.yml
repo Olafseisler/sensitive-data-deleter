@@ -53,7 +53,10 @@ jobs:
           cmake-version: latest
 
       - name: Setup Ninja
-        uses: turtlesec-no/get-ninja@main
+        uses: choco install ninja
+
+      - name: Test ninja installation
+        run: ninja --version
 
       - name: Setup MSVC toolchain
         uses: TheMrMilchmann/setup-msvc-dev@v3
