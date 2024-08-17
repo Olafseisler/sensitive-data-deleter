@@ -2,10 +2,10 @@ cmake_minimum_required(VERSION 3.25)
 project(sensitive-data-deleter)
 
 if (WIN32)
-    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded")
-    include_directories(${CMAKE_SOURCE_DIR}/vcpkg_installed/x64-windows-static/include/hs)
+        set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded")
+        include_directories(${CMAKE_SOURCE_DIR}/vcpkg_installed/x64-windows-static/include/hs)
 else()
-    include_directories(/opt/homebrew/Cellar/vectorscan/5.4.11/include)
+        include_directories(/opt/homebrew/Cellar/vectorscan/5.4.11/include)
 endif()
 
 #set(CMAKE_INCLUDE_CURRENT_DIR ON)
@@ -24,43 +24,52 @@ pkg_check_modules(POPPLER_CPP REQUIRED IMPORTED_TARGET poppler-cpp)
 
 
 if (WIN32)
-add_executable(${PROJECT} WIN32
-        src/main.cpp ${QT_RESOURCES}
-        src/mainwindow.cpp
-        src/mainwindow.h
-        src/mainwindow.ui
-        src/configmanager.cpp
-        src/configmanager.h
-        src/filescanner.cpp
-        src/filescanner.h
-        src/chunkreader.cpp
-        src/chunkreader.h)
-else()
-add_executable(${PROJECT}
-        src/main.cpp ${QT_RESOURCES}
-        src/mainwindow.cpp
-        src/mainwindow.h
-        src/mainwindow.ui
-        src/configmanager.cpp
-        src/configmanager.h
-        src/filescanner.cpp
-        src/filescanner.h
-        src/chunkreader.cpp
-        src/chunkreader.h)
-endif()
+        add_executable(${PROJECT} WIN32
+                src/main.cpp ${QT_RESOURCES}
+                src/mainwindow.cpp
+                src/mainwindow.h
+                src/mainwindow.ui
+                src/configmanager.cpp
+                src/configmanager.h
+                src/filescanner.cpp
+                src/filescanner.h
+                src/chunkreader.cpp
+                src/chunkreader.h)
 
-target_link_libraries(${PROJECT}
-        Qt::Core
-        Qt::Gui
-        Qt::Widgets
-        MINIZIP::minizip-ng
-        tinyxml2::tinyxml2
-        PkgConfig::POPPLER_CPP
-
-        ${CMAKE_SOURCE_DIR}/vcpkg_installed/x64-windows-static/lib/hs.lib
-#        /opt/homebrew/Cellar/vectorscan/5.4.11/lib/libhs.a
+        target_link_libraries(${PROJECT}
+                Qt::Core
+                Qt::Gui
+                Qt::Widgets
+                MINIZIP::minizip-ng
+                tinyxml2::tinyxml2
+                PkgConfig::POPPLER_CPP
+                ${CMAKE_SOURCE_DIR}/vcpkg_installed/x64-windows-static/lib/hs.lib
         )
+elseif(APPLE)
+        add_executable(${PROJECT}
+                src/main.cpp ${QT_RESOURCES}
+                src/mainwindow.cpp
+                src/mainwindow.h
+                src/mainwindow.ui
+                src/configmanager.cpp
+                src/configmanager.h
+                src/filescanner.cpp
+                src/filescanner.h
+                src/chunkreader.cpp
+                src/chunkreader.h)
 
-if (WIN32)
-    target_link_options(${PROJECT} PRIVATE /NODEFAULTLIB:MSVCRT)
+        target_link_libraries(${PROJECT}
+                Qt::Core
+                Qt::Gui
+                Qt::Widgets
+                PkgConfig::POPPLER_CPP
+                minizip-ng::minizip-ng
+                tinyxml2::tinyxml2
+                /opt/homebrew/Cellar/vectorscan/5.4.11/lib/libhs.a
+        )
 endif()
+
+
+
+
+
