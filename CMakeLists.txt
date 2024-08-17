@@ -14,7 +14,6 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
-
 set(PROJECT "SensitiveDataDeleter")
 
 find_package(Qt6 6.7.2 COMPONENTS Core Widgets Gui REQUIRED)
