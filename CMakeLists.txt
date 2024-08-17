@@ -3,6 +3,9 @@ project(sensitive-data-deleter)
 
 if (WIN32)
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded")
+    include_directories(${CMAKE_SOURCE_DIR}/vcpkg_installed/x64-windows-static/include/hs)
+else()
+    include_directories(/opt/homebrew/Cellar/vectorscan/5.4.11/include)
 endif()
 
 #set(CMAKE_INCLUDE_CURRENT_DIR ON)
@@ -19,9 +22,6 @@ find_package(minizip-ng REQUIRED)
 find_package(tinyxml2 CONFIG REQUIRED)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(POPPLER_CPP REQUIRED IMPORTED_TARGET poppler-cpp)
-
-#include_directories(${CMAKE_SOURCE_DIR}/vcpkg_installed/x64-windows-static/include/hs)
-include_directories(/opt/homebrew/Cellar/vectorscan/5.4.11/include)
 
 
 if (WIN32)
@@ -58,8 +58,10 @@ target_link_libraries(${PROJECT}
         tinyxml2::tinyxml2
         PkgConfig::POPPLER_CPP
 
-#        ${CMAKE_SOURCE_DIR}/vcpkg_installed/x64-windows-static/lib/hs.lib
-        /opt/homebrew/Cellar/vectorscan/5.4.11/lib/libhs.a
+        ${CMAKE_SOURCE_DIR}/vcpkg_installed/x64-windows-static/lib/hs.lib
+#        /opt/homebrew/Cellar/vectorscan/5.4.11/lib/libhs.a
         )
 
-
+if (WIN32)
+    target_link_options(${PROJECT} PRIVATE /NODEFAULTLIB:MSVCRT)
+endif()

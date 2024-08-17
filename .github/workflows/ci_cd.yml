@@ -36,8 +36,9 @@ jobs:
           mkdir -p ${{ github.workspace }}/vcpkg_installed
           mkdir -p ${{ github.workspace }}/build
 
-      - name: Set up cache for vcpkg binary caching
+      - name: Restore vcpkg cache
         uses: actions/cache@v4
+        id: vcpkg-cache
         with:
           path: |
             .cache/vcpkg
@@ -71,8 +72,6 @@ jobs:
         with:
           arch: x64
 
-      - name: print the vcpkg root variable
-        run: echo $env:VCPKG_ROOT_DIR
       - name: Install vcpkg
         run: |
           git clone https://github.com/microsoft/vcpkg.git $env:VCPKG_ROOT_DIR
@@ -80,8 +79,15 @@ jobs:
 
       - name: Install dependencies
         run: |
-          & "$env:VCPKG_ROOT_DIR/vcpkg.exe" install --triplet x64-windows-static --feature-flags=manifests
+          & "$env:VCPKG_ROOT_DIR/vcpkg.exe" install --triplet x64-windows-static --feature-flags=manifests --recurse 
 
+      - name: Save vcpkg cache after install
+        uses: actions/cache@v4
+        with:
+          path: |
+            .cache/vcpkg
+            vcpkg_installed
+          key: vcpkg-cache-${{ runner.os }}-${{ hashFiles('vcpkg.json') }}
 
       - name: Build application
         run: |
