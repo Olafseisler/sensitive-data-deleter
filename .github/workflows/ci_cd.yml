@@ -82,15 +82,6 @@ jobs:
         run: |
           & "$env:VCPKG_ROOT_DIR/vcpkg.exe" install --triplet x64-windows-static --feature-flags=manifests --recurse 
 
-      - name: Check if vcpkg cache is valid
-        run: |
-          if (Test-Path -Path "$env:GITHUB_WORKSPACE/.cache/vcpkg") {
-            if ((Get-ChildItem -Path "$env:GITHUB_WORKSPACE/.cache/vcpkg" -Recurse | Measure-Object).Count -eq 0) {
-              Write-Output "Cache is empty, skipping cache save."
-              exit 1
-            }
-          }
-
       - name: Save vcpkg cache after install
         uses: actions/cache/save@v4
         if: always()
