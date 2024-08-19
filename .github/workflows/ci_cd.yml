@@ -7,12 +7,14 @@ on:
     paths:
       - 'src/**'
       - 'vcpkg.json'
+      - 'CmakeLists.txt'
   pull_request:
     branches:
       - master
     paths:
       - 'src/**'
       - 'vcpkg.json'
+      - 'CmakeLists.txt'
 
 jobs:
   build:
