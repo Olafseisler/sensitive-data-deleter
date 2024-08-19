@@ -4,9 +4,15 @@ on:
   push:
     branches:
       - master
+    paths:
+      - 'src/**'
+      - 'vcpkg.json'
   pull_request:
     branches:
       - master
+    paths:
+      - 'src/**'
+      - 'vcpkg.json'
 
 jobs:
   build:
@@ -128,7 +134,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: v1.0.1
+          tag_name: v1.0.2
           release_name: Release ${{ github.run_number }}
           body: |
             Changes in this Release:
