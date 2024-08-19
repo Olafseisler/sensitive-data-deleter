@@ -26,7 +26,11 @@ them from the "Flagged" list. NB! All files that are NOT removed from the "Flagg
 The scan configuration defines which file types (extensions) are scanned and which regex patterns are used matched against 
 file contents. The configuration is defined in a .json file. The app also needs to have a configpath.txt file in the
 same directory as the executable that contains the path to the config. Users can add and remove both scan patterns and 
-types using the corresponding buttons. Users can change the configuration path by selecting a new config file from the
+file types using the corresponding buttons. WARNING! users can add any file types they wish, but the app scans only 
+those that have plaintext, PDF or Zip archive content (newer, post 2006 MS Office docs are just .xml files wrapped in a zip archive).
+If you are not sure, better leave the file types untouched.
+
+Users can change the configuration path by selecting a new config file from the
 file dialog opened by clicking the "Load Config" button. Users can also start a new, clean configuration file by clicking
 the "New Config" button.
 
