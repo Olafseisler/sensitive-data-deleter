@@ -4,14 +4,8 @@
 #include <QDebug>
 
 void messageHandler(QtMsgType type, const QMessageLogContext &context, const QString &msg) {
-#ifndef QT_DEBUG
-    if (type == QtDebugMsg || type == QtWarningMsg || type == QtCriticalMsg) {
-        return; // Suppress output in release mode
-    }
-#else
-    // Print with regular qt message handler in debug mode
+    // Print with regular qt message handler 
     QMessageLogger(context.file, context.line, context.function).debug().noquote() << msg;
-#endif
 }
 
 int main(int argc, char *argv[]) {
