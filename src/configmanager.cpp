@@ -14,6 +14,7 @@
 
 #include "configmanager.h"
 
+
 void showProblemDialog(const QString &title, const QString &message) {
     qWarning() << message;
     QDialog dialog;
