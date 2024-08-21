@@ -27,7 +27,7 @@ pkg_check_modules(POPPLER_CPP REQUIRED IMPORTED_TARGET poppler-cpp)
 
 
 if (WIN32)
-        add_executable(${PROJECT} WIN32
+        add_executable(${PROJECT} 
                 src/main.cpp ${QT_RESOURCES}
                 src/mainwindow.cpp
                 src/mainwindow.h
