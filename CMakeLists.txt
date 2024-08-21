@@ -25,7 +25,6 @@ find_package(tinyxml2 CONFIG REQUIRED)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(POPPLER_CPP REQUIRED IMPORTED_TARGET poppler-cpp)
 
-
 if (WIN32)
         add_executable(${PROJECT} 
                 src/main.cpp ${QT_RESOURCES}
