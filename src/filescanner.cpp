@@ -86,9 +86,26 @@ FileScanner::scanFiles(QPromise<std::map<std::string, std::pair<ScanResult, std:
 void FileScanner::scannerWorker(QPromise<std::map<std::string, std::pair<ScanResult, std::vector<MatchInfo>>>> &promise,
                                 std::atomic<size_t> &filesProcessed,
                                 size_t totalFiles) {
-    hs_scratch_t *scratch; // Allocate separate scratch space for each thread
-    if (hs_alloc_scratch(database, &scratch) != HS_SUCCESS) {
-        qDebug() << "ERROR: Unable to allocate scratch space.";
+    hs_scratch_t *scratch;
+    hs_error_t err = hs_alloc_scratch(database, &scratch);
+    if (err != HS_SUCCESS) {
+        switch (err) {
+            case HS_INVALID:
+                qDebug() << "ERROR: Invalid parameters passed to hs_alloc_scratch.";
+                break;
+            case HS_NOMEM:
+                qDebug() << "ERROR: Not enough memory available to allocate scratch space.";
+                break;
+            case HS_DB_VERSION_ERROR:
+                qDebug() << "ERROR: The database provided was built for a different version of Hyperscan.";
+                break;
+            case HS_DB_PLATFORM_ERROR:
+                qDebug() << "ERROR: The database provided was built for a different platform.";
+                break;
+            default:
+                qDebug() << "ERROR: Unable to allocate scratch space. Unknown error occurred.";
+                break;
+        }
         return;
     }
 
