@@ -17,6 +17,7 @@
 #define CHUNK_SIZE (64 * 1024)
 #define MAX_NUM_MATCHES 100 // Max number of matches per file that will be stored
 #define BATCH_SIZE 10
+/
 
 void
 FileScanner::scanFiles(QPromise<std::map<std::string, std::pair<ScanResult, std::vector<MatchInfo>>>> &promise,
@@ -36,7 +37,7 @@ FileScanner::scanFiles(QPromise<std::map<std::string, std::pair<ScanResult, std:
     }
 
     if (hs_compile_multi(scanPatterns.data(), flags.data(), ids.data(), scanPatterns.size(), HS_MODE_BLOCK,
-                         nullptr, &database, &compile_err) != HS_SUCCESS) {
+                         &platformInfo, &database, &compile_err) != HS_SUCCESS) {
         QString errorMessage = QString("Failed to compile patterns: %1").arg(compile_err->message);
         hs_free_compile_error(compile_err);
         ids.clear();
@@ -58,9 +59,9 @@ FileScanner::scanFiles(QPromise<std::map<std::string, std::pair<ScanResult, std:
     // Scan files based on given patterns and file types with multiple threads
     filesProcessed = 0;
     std::vector<std::thread> threads;
-    uint numThreads = std::thread::hardware_concurrency();
+    uint32_t numThreads = std::thread::hardware_concurrency();
 
-    for (uint j = 0; j < numThreads; j++) {
+    for (uint32_t j = 0; j < numThreads; j++) {
         threads.emplace_back(&FileScanner::scannerWorker, this,
                              std::ref(promise), std::ref(filesProcessed), filePaths.size());
     }
@@ -86,7 +87,7 @@ FileScanner::scanFiles(QPromise<std::map<std::string, std::pair<ScanResult, std:
 void FileScanner::scannerWorker(QPromise<std::map<std::string, std::pair<ScanResult, std::vector<MatchInfo>>>> &promise,
                                 std::atomic<size_t> &filesProcessed,
                                 size_t totalFiles) {
-    hs_scratch_t *scratch;
+    hs_scratch_t *scratch = nullptr;
     hs_error_t err = hs_alloc_scratch(database, &scratch);
     if (err != HS_SUCCESS) {
         switch (err) {

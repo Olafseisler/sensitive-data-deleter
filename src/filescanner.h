@@ -134,6 +134,10 @@ private:
     std::vector<uint32_t> flags;
     std::vector<uint32_t> ids;
 
+    const hs_platform_info_t platformInfo = {
+            HS_CPU_FEATURES_AVX2,
+            HS_TUNE_FAMILY_GENERIC
+    };
 };
 
 

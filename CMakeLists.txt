@@ -2,12 +2,18 @@ cmake_minimum_required(VERSION 3.25)
 project(sensitive-data-deleter)
 
 if (WIN32)
-        set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded")
-        set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MT")
-        include_directories(${CMAKE_SOURCE_DIR}/vcpkg_installed/x64-windows-static/include/hs)
+        # If is a debug build
+        if (CMAKE_BUILD_TYPE STREQUAL "Debug")
+                set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+                set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /MTd")
+        else ()
+                set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded")
+                set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MT")
+        endif()
         set(VCPKG_CRT_LINKAGE static)
         set(VCPKG_LIBRARY_LINKAGE static)
-else()
+        include_directories(${CMAKE_SOURCE_DIR}/vcpkg_installed/x64-windows-static/include/hs)
+elseif (APPLE)
         include_directories(/opt/homebrew/Cellar/vectorscan/5.4.11/include)
 endif()
 
@@ -38,15 +44,27 @@ if (WIN32)
                 src/chunkreader.cpp
                 src/chunkreader.h)
 
-        target_link_libraries(${PROJECT}
-                Qt::Core
-                Qt::Gui
-                Qt::Widgets
-                MINIZIP::minizip-ng
-                tinyxml2::tinyxml2
-                PkgConfig::POPPLER_CPP
-                ${CMAKE_SOURCE_DIR}/vcpkg_installed/x64-windows-static/lib/hs.lib
-        )
+        if (CMAKE_BUILD_TYPE STREQUAL "Debug")
+                target_link_libraries(${PROJECT}
+                        Qt::Core
+                        Qt::Gui
+                        Qt::Widgets
+                        PkgConfig::POPPLER_CPP
+                        MINIZIP::minizip-ng
+                        tinyxml2::tinyxml2
+                        ${CMAKE_SOURCE_DIR}/vcpkg_installed/x64-windows-static/debug/lib/hs.lib
+                )
+        else()
+                target_link_libraries(${PROJECT}
+                        Qt::Core
+                        Qt::Gui
+                        Qt::Widgets
+                        PkgConfig::POPPLER_CPP
+                        MINIZIP::minizip-ng
+                        tinyxml2::tinyxml2
+                        ${CMAKE_SOURCE_DIR}/vcpkg_installed/x64-windows-static/lib/hs.lib
+                )
+        endif()
 elseif(APPLE)
         add_executable(${PROJECT}
                 src/main.cpp ${QT_RESOURCES}
