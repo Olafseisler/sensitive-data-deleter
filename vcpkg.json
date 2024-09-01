@@ -2,9 +2,18 @@
   "name": "sensitive-data-deleter",
   "version": "0.1",
   "dependencies": [
-    "qtbase",
-    "poppler",
+    "pkgconf",
+    "minizip-ng",
     "hyperscan",
-    "pkgconf"
+    "tinyxml2",
+    {
+      "name": "poppler",
+      "default-features": false
+    },
+    {
+      "name": "qtbase",
+      "default-features": false,
+        "features": ["widgets", "thread", "concurrent", "pcre2"]
+    }
   ]
 }

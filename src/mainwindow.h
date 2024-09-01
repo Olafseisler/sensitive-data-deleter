@@ -13,6 +13,8 @@
 #include <QDebug>
 #include <QProgressDialog>
 #include <QFileIconProvider>
+#include <QTimer>
+#include <map>
 
 #include "ui_mainwindow.h"
 #include "configmanager.h"
@@ -26,10 +28,9 @@ class MainWindow : public QMainWindow {
 Q_OBJECT
 
 public:
-    MainWindow(QWidget *parent = nullptr);
+    explicit MainWindow(QWidget *parent = nullptr);
 
-    ~MainWindow();
-    // ... other members and methods ...
+    ~MainWindow() override;
 
 private slots:
 
@@ -57,6 +58,20 @@ private slots:
 
     void on_startConfigButton_clicked();
 
+    void on_flaggedSearchBox_textEdited();
+
+    void startScanOperation(const std::vector<std::string> &filePaths,
+                            const std::vector<std::pair<std::string, std::string>> &checkedScanPatterns,
+                            const std::map<std::string, std::string> &checkedFileTypes);
+
+public slots:
+
+    void onFlaggedFilesScrollBarMoved(int value);
+
+    void onSearchBoxTextEdited(const QString &newText);
+
+    void processScanResults(const std::map<std::string, std::pair<ScanResult, std::vector<MatchInfo>>> &results);
+
 private:
     QTreeWidget *fileTreeWidget;
     QTreeWidget *flaggedFilesTreeWidget;
@@ -65,6 +80,10 @@ private:
     QDateEdit *fromDateEdit;
     QDateEdit *toDateEdit;
     QMap<QString, QTreeWidgetItem *> pathsToScan;
+
+    QMap<std::string, QTreeWidgetItem *> flaggedItems;
+    QMap<std::string, std::pair<ScanResult, std::vector<MatchInfo>>> scanResults;
+
     ConfigManager *configManager;
     QTreeWidgetItem *myRootItem;
     QFileSystemWatcher *watcher;
@@ -72,14 +91,18 @@ private:
     bool allFlaggedSelected = false;
     bool maxDepthReached = false;
     QString lastUpdatedPath = "";
-    QMap<std::string, QTreeWidgetItem *> flaggedItems;
     QFileIconProvider iconProvider = QFileIconProvider();
     Ui::MainWindow *ui;
+    uint8_t scanResultBits = 0;
+    int numFlaggedItemsLoaded = 0;
+    int numFlaggedFiles = 0;
+
+
+    QTimer *searchDebounceTimer;
 
     void setupUI();
 
-    void constructScanTreeViewRecursively(QTreeWidgetItem *parentItem, const QString &path, int depth = 0,
-                                          bool useShortName = false);
+    void constructScanTreeViewRecursively(QTreeWidgetItem *parentItem, const QString &path);
 
     void updateTreeItem(QTreeWidgetItem *item, const QString &path);
 
@@ -89,21 +112,25 @@ private:
 
     QString getParentPath(const QString &dirPath);
 
-    QTreeWidgetItem *findItemForPath(QTreeWidget *treeWidget, const QString &path);
-
-    QTreeWidgetItem *findItemForPath(QTreeWidgetItem *parentItem, const QString &path);
+    void expandToFlaggedItem(const QString &path);
 
     QDialog *createConfirmationDialog(const QString &title, const QString &labelText, const QString &buttonText);
 
     QDialog *createInfoDialog(const QString &title, const QString &labelText);
 
-    void processScanResults(std::map<std::string, std::pair<ScanResult, std::vector<MatchInfo>>> &matches,
-                            QProgressDialog *progressDialog);
+    void getScanResultBits(const std::pair<std::string, std::pair<ScanResult, std::vector<MatchInfo>>> &match);
 
     void setRowBackgroundColor(QTreeWidgetItem *item, const QColor &color, int columnCount);
 
-    void handleFlaggedScanItem(const std::pair<std::string, std::pair<ScanResult, std::vector<MatchInfo>>> &match,
-                               uint8_t &scanResultBits);
+    void addFlaggedItemWidget(const QString &path, const std::vector<MatchInfo> &matches);
+
+    void loadNextFlaggedItemsBatch(const QString &searchText = "");
+
+    void handleFlaggedScanItem(const std::string &flaggedPath);
+
+    bool isStringInMatchInfo(const MatchInfo &match, const std::string &path, const std::string &searchString);
+
+    std::vector<std::string> addFilesToScanList();
 
     void updateConfigPresentation();
 };

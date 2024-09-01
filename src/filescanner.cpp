@@ -1,155 +1,210 @@
 //
 // Created by Olaf Seisler on 18.04.2024.
 //
-
+#include <algorithm>
 #include <fstream>
 #include <algorithm>
 #include <filesystem>
 #include <QMimeType>
 #include <QMimeDatabase>
-#include <QFile>
-#include <QFileInfo>
 #include <random>
 #include <iostream>
-#include "poppler-document.h"
-#include "poppler-page.h"
-#include <hs/hs.h>
+#include <QFileInfo>
 
 #include "filescanner.h"
 #include "chunkreader.h"
 
-#define CHUNK_SIZE 4096
-#define MAX_NUM_MATCHES 100
-
-FileScanner::FileScanner() {
-
-}
-
-FileScanner::~FileScanner() {
-    // Destructor
-}
-
+#define CHUNK_SIZE (64 * 1024)
+#define MAX_NUM_MATCHES 100 // Max number of matches per file that will be stored
+#define BATCH_SIZE 10
 
 void
 FileScanner::scanFiles(QPromise<std::map<std::string, std::pair<ScanResult, std::vector<MatchInfo>>>> &promise,
-                            const std::vector<std::string>& filePaths,
-                            const std::map<std::string, std::string>& patterns,
-                            const std::map<std::string, std::string>& fileTypes) {
-    // Scan files based on given patterns and file types
-    int i = 0;
-    std::map<std::string, std::pair<ScanResult, std::vector<MatchInfo>>> matches;
+                       const std::vector<std::string> &filePaths,
+                       const std::vector<std::pair<std::string, std::string>> &patterns,
+                       const std::map<std::string, std::string> &fileTypes) {
 
-    for (const auto &filePath: filePaths) {
-        // If the file type is not in the list of file types, skip the file
-        bool foundInFileTypes = false;
-        for (const auto &item: fileTypes) {
-            if (filePath.find(item.first) != std::string::npos) {
-                foundInFileTypes = true;
-                break;
-            }
-        }
-        if (!foundInFileTypes) {
-            matches[filePath] = std::make_pair(ScanResult::UNSUPPORTED_TYPE, std::vector<MatchInfo>());
-            continue;
-        }
-
-        promise.setProgressValue(static_cast<int>((100 * i) / filePaths.size()));
-
-        // If the file is not a text file based on MIME type, skip the file
-        QMimeType mimeType = QMimeDatabase().mimeTypeForFile(QString::fromStdString(filePath));
-        if (!mimeType.inherits("text/plain") &&
-            !mimeType.inherits("application/pdf")) {
-            matches[filePath] = std::make_pair(ScanResult::UNSUPPORTED_TYPE, std::vector<MatchInfo>());
-            continue;
-        }
-
-        std::pair<ScanResult, std::vector<MatchInfo>> fileMatches = scanFileForSensitiveData(filePath, patterns);
-        matches[filePath] = fileMatches;
-
-        ++i;
+    hs_compile_error_t *compile_err;
+    flags = std::vector<unsigned int>(patterns.size(), HS_FLAG_SINGLEMATCH | HS_FLAG_UTF8);
+    for (int i = 0; i < patterns.size(); ++i) {
+        ids.push_back(i);
     }
+
+    for (const auto &item: patterns) {
+        scanPatterns.emplace_back(item.first.c_str());
+        scanPatternDescriptions.emplace_back(item.second.c_str());
+    }
+
+    if (hs_compile_multi(scanPatterns.data(), flags.data(), ids.data(), scanPatterns.size(), HS_MODE_BLOCK,
+                         nullptr, &database, &compile_err) != HS_SUCCESS) {
+        QString errorMessage = QString("Failed to compile patterns: %1").arg(compile_err->message);
+        hs_free_compile_error(compile_err);
+        ids.clear();
+        flags.clear();
+        scanPatterns.clear();
+        scanPatternDescriptions.clear();
+
+        promise.setException(std::make_exception_ptr(std::runtime_error(errorMessage.toStdString())));
+        promise.finish();
+        return;
+    }
+
+    for (const auto &item: filePaths) {
+        file_queue.push(std::filesystem::path(item));
+    }
+
+    this->scanFileTypes = fileTypes;
+
+    // Scan files based on given patterns and file types with multiple threads
+    filesProcessed = 0;
+    std::vector<std::thread> threads;
+    uint numThreads = std::thread::hardware_concurrency();
+
+    for (uint j = 0; j < numThreads; j++) {
+        threads.emplace_back(&FileScanner::scannerWorker, this,
+                             std::ref(promise), std::ref(filesProcessed), filePaths.size());
+    }
+
+    file_queue.set_done();
+
+    for (auto &thread: threads) {
+        thread.join();
+    }
+
     promise.addResult(matches);
-    promise.setProgressValue(100);
+
+    // Clear the scanner state
+    hs_free_database(database);
+    matches.clear();
+    scanPatterns.clear();
+    scanPatternDescriptions.clear();
+    ids.clear();
+    flags.clear();
     promise.finish();
 }
 
+void FileScanner::scannerWorker(QPromise<std::map<std::string, std::pair<ScanResult, std::vector<MatchInfo>>>> &promise,
+                                std::atomic<size_t> &filesProcessed,
+                                size_t totalFiles) {
+    hs_scratch_t *scratch;
+    hs_error_t err = hs_alloc_scratch(database, &scratch);
+    if (err != HS_SUCCESS) {
+        switch (err) {
+            case HS_INVALID:
+                qDebug() << "ERROR: Invalid parameters passed to hs_alloc_scratch.";
+                break;
+            case HS_NOMEM:
+                qDebug() << "ERROR: Not enough memory available to allocate scratch space.";
+                break;
+            case HS_DB_VERSION_ERROR:
+                qDebug() << "ERROR: The database provided was built for a different version of Hyperscan.";
+                break;
+            case HS_DB_PLATFORM_ERROR:
+                qDebug() << "ERROR: The database provided was built for a different platform.";
+                break;
+            default:
+                qDebug() << "ERROR: Unable to allocate scratch space. Unknown error occurred.";
+                break;
+        }
+        return;
+    }
+
+    std::filesystem::path filePath;
+    while (file_queue.pop(filePath)) {
+        auto result = scanFileForSensitiveData(filePath, scratch);
+        {
+            std::lock_guard<std::mutex> lock(matches_mutex);
+            matches[filePath.string()] = result;
+        }
+        size_t processed = ++filesProcessed;
+        promise.setProgressValue(static_cast<int>((processed * 100) / totalFiles));
+    }
+
+    hs_free_scratch(scratch);
+}
+
 std::pair<ScanResult, std::vector<MatchInfo>>
-FileScanner::scanFileForSensitiveData(const std::filesystem::path &filePath, const std::map<std::string, std::string> &patterns) {
-    // Check if the file is readable and writeable with Qt
-    QFileInfo fileInfo(QString::fromStdString(filePath.generic_string()));
+FileScanner::scanFileForSensitiveData(const std::filesystem::path &filePath, hs_scratch_t *threadScratch) {
+
+    // Check if the file extension exists in the file types map
+    if (scanFileTypes.find(filePath.extension().string()) == scanFileTypes.end()) {
+        return std::make_pair(ScanResult::UNSUPPORTED_TYPE, std::vector<MatchInfo>());
+    }
+    // If the file is not a text file based on MIME type, skip the file
+    QMimeType mimeType = QMimeDatabase().mimeTypeForFile(QString::fromStdString(filePath.string()));
+    if (!mimeType.inherits("text/plain") &&
+        !mimeType.inherits("application/pdf") &&
+        !mimeType.inherits("application/zip")) {
+        return std::make_pair(ScanResult::UNSUPPORTED_TYPE, std::vector<MatchInfo>());
+    }
+    QFileInfo fileInfo(QString::fromStdString(filePath.string()));
     if (!fileInfo.isReadable()) {
         return std::make_pair(ScanResult::UNREADABLE, std::vector<MatchInfo>());
     }
 
     auto returnPair = std::make_pair(ScanResult::CLEAN, std::vector<MatchInfo>());
-    char buffer[CHUNK_SIZE];
-    ChunkReader *chunkReader;
-
-    try{
-        chunkReader = ChunkReaderFactory::createReader(filePath);
-
+    ScanContext scanContext(&returnPair, &scanPatterns, &scanPatternDescriptions, nullptr);
+    
+    std::unique_ptr<ChunkReader> chunkReader;
+    try {
+        chunkReader.reset(ChunkReaderFactory::createReader(filePath));
+        if (!chunkReader) {
+            return std::make_pair(ScanResult::UNREADABLE, std::vector<MatchInfo>());
+        }
     } catch (std::exception &e) {
-        return std::make_pair(ScanResult::UNSUPPORTED_TYPE, std::vector<MatchInfo>());
+        qWarning() << "Error creating ChunkReader: " << e.what() << " for file: " << filePath.string();
+        return std::make_pair(ScanResult::UNREADABLE, std::vector<MatchInfo>());
     }
 
     while (true) {
-        // Read a chunk from file
+        char buffer[CHUNK_SIZE];
+        std::memset(buffer, 0, CHUNK_SIZE);
+        scanContext.chunk = buffer;
         size_t numBytesRead = chunkReader->readChunkFromFile(buffer, CHUNK_SIZE);
         if (numBytesRead == 0) {
             break;
+        } else if (numBytesRead == -1) {
+            continue;
         }
 
-        // Scan the given chunk with regex
-        std::string chunk(buffer, numBytesRead);
-        auto chunkMatches = scanChunkWithRegex(chunk, patterns);
-        if (chunkMatches.first == ScanResult::FLAGGED) {
-            returnPair.first = ScanResult::FLAGGED;
-        }
-        returnPair.second.insert(returnPair.second.end(), chunkMatches.second.begin(), chunkMatches.second.end());
-
-        if (returnPair.second.size() > MAX_NUM_MATCHES) {
-            // Trim the matches list down to MAX_NUM_MATCHES
-            returnPair.second.resize(MAX_NUM_MATCHES);
-            return returnPair;
-        }
+        scanChunkWithRegex(buffer, scanContext, threadScratch);
     }
 
     if (returnPair.first == ScanResult::FLAGGED && !fileInfo.isWritable()) {
-        returnPair.first = ScanResult::FLAGGED_BUT_IMMUTABLE;
+        returnPair.first = ScanResult::FLAGGED_BUT_UNWRITABLE;
     }
-    delete chunkReader;
 
     return returnPair;
 }
 
-std::pair<ScanResult, std::vector<MatchInfo>> FileScanner::scanChunkWithRegex(const std::string &chunk,
-                                                                              const std::map<std::string,
-                                                                              std::string> &patterns) {
-    auto returnPair = std::make_pair(ScanResult::CLEAN, std::vector<MatchInfo>());
-    for (const auto &pattern: patterns) {
-        std::regex regex(pattern.first);
-        std::smatch match;
-        auto searchStart = chunk.cbegin();
-        while (std::regex_search(searchStart, chunk.cend(), match, regex)) {
-            // Sensitive data found
-            returnPair.first = ScanResult::FLAGGED;
-            MatchInfo matchInfo;
-            matchInfo.patternUsed = std::make_pair(pattern.first, pattern.second);
-            matchInfo.match = match.str();
-            matchInfo.startIndex = match.position() + std::distance(chunk.cbegin(), searchStart);
-            matchInfo.endIndex = matchInfo.startIndex + match.length();
-            returnPair.second.push_back(matchInfo);
+int FileScanner::eventHandler(uint32_t id, uint64_t from, uint64_t to, uint32_t flags,
+                              void *context) {
+    auto *scanContext = static_cast<ScanContext *>(context);
 
-            if (returnPair.second.size() >= MAX_NUM_MATCHES) {
-                return returnPair;
-            }
-
-            searchStart = match.suffix().first;
-        }
+    if (scanContext->returnPair->second.size() >= MAX_NUM_MATCHES) {
+        return 0;
     }
-    return returnPair;
+
+    uint64_t startIndex = to > 30 ? to - 30 : 0;
+    uint64_t endIndex = to + 10 > CHUNK_SIZE ? CHUNK_SIZE : to + 10;
+    scanContext->returnPair->first = ScanResult::FLAGGED;
+    scanContext->returnPair->second.emplace_back(
+        std::make_pair(scanContext->scanPatterns->at(id), scanContext->scanPatternDescriptions->at(id)),
+        std::string(scanContext->chunk + startIndex, scanContext->chunk + endIndex),
+        startIndex,
+        to
+    );
+
+    return 0;
 }
 
+
+void FileScanner::scanChunkWithRegex(const char *chunk,
+                                     ScanContext &scanContext, hs_scratch_t *scratch) {
+    if (hs_scan(database, chunk, CHUNK_SIZE, 0, scratch, &eventHandler, &scanContext) != HS_SUCCESS) {
+        qDebug() << "ERROR: Unable to scan input buffer. Likely encountered invalid UTF-8 sequence.";
+    }
+}
 
 /**
  * Write the file full of random data
@@ -177,21 +232,21 @@ void FileScanner::scrambleFile(const std::string &filePath) {
 
 
     for (int i = 0; i < numBlocks; i++) {
-        int16_t buffer[CHUNK_SIZE];
-        for (int16_t &j: buffer) {
+        int8_t buffer[CHUNK_SIZE];
+        for (signed char &j: buffer) {
             j = dis(gen);
         }
         file.write((char *) buffer, CHUNK_SIZE);
     }
 
     // Pad the file with random data
-    auto *buffer = new int16_t[numBytesToPad];
+    auto *buffer = new int8_t[numBytesToPad];
     for (int i = 0; i < numBytesToPad; i++) {
         buffer[i] = dis(gen);
     }
+    file.write((char *) buffer, numBytesToPad);
     delete[] buffer;
 
-    file.write((char *) buffer, numBytesToPad);
     file.close();
 }
 
@@ -203,7 +258,7 @@ void FileScanner::deleteFiles(std::vector<std::string> &filePaths) {
             std::filesystem::remove(filePath);
 
         } catch (std::exception &e) {
-            std::cerr << "Failed to scramble file: " << e.what() << std::endl;
+            qWarning() << "Failed to scramble file: " << e.what();
         }
     }
 }

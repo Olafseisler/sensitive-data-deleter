@@ -1,0 +1,156 @@
+name: CI-CD
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - 'src/**'
+      - 'vcpkg.json'
+      - 'CmakeLists.txt'
+  pull_request:
+    branches:
+      - master
+    paths:
+      - 'src/**'
+      - 'vcpkg.json'
+      - 'CmakeLists.txt'
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    env:
+      VCPKG_ROOT_DIR: ${{ github.workspace }}/vcpkg
+      VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/.cache/vcpkg
+      VCPKG_BINARY_SOURCES: 'clear;x-gha,readwrite'
+
+    steps:
+      # Set env vars needed for vcpkg to leverage the GitHub Action cache as a storage
+      # for Binary Caching.
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');  
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Ensure vcpkg directories exist
+        run: |
+          mkdir -p $env:VCPKG_ROOT_DIR
+          mkdir -p $env:VCPKG_DEFAULT_BINARY_CACHE
+          mkdir -p ${{ github.workspace }}/vcpkg_installed
+          mkdir -p ${{ github.workspace }}/build
+
+      - name: Restore vcpkg cache
+        uses: actions/cache/restore@v4
+        id: vcpkg-cache
+        with:
+          path: |
+            .cache/vcpkg
+            vcpkg_installed
+          key: vcpkg-cache-${{ runner.os }}-${{ hashFiles('vcpkg.json') }}-v1.0.1beta
+          restore-keys: |
+            vcpkg-cache-${{ runner.os }}-
+
+      - name: Restore CMake cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            build
+          key: cmake-cache-${{ runner.os }}-${{ hashFiles('CMakeLists.txt') }}-v1.0.1beta
+          restore-keys: |
+            cmake-cache-${{ runner.os }}-
+
+      - name: Setup CMake
+        uses: lukka/get-cmake@latest
+        with:
+          cmake-version: latest
+
+      - name: Setup Ninja
+        run: choco install ninja
+
+      - name: Test ninja installation
+        run: ninja --version
+
+      - name: Setup MSVC toolchain
+        uses: TheMrMilchmann/setup-msvc-dev@v3
+        with:
+          arch: x64
+
+      - name: Install vcpkg
+        run: |
+          git clone https://github.com/microsoft/vcpkg.git $env:VCPKG_ROOT_DIR
+          & "$env:VCPKG_ROOT_DIR/bootstrap-vcpkg.bat"
+
+      - name: Install dependencies
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          & "$env:VCPKG_ROOT_DIR/vcpkg.exe" install --triplet x64-windows-static --feature-flags=manifests --recurse 
+
+      - name: Save vcpkg cache after install
+        uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: |
+            .cache/vcpkg
+            vcpkg_installed
+          key: vcpkg-cache-${{ runner.os }}-${{ hashFiles('vcpkg.json') }}-v1.0.1beta
+
+      - name: Build application
+        run: |
+          cmake -S . -B build -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT_DIR/scripts/buildsystems/vcpkg.cmake" -G "Visual Studio 17 2022" -DCMAKE_BUILD_TYPE=Release -DVCPKG_BUILD_TYPE=release -DVCPKG_TARGET_TRIPLET=x64-windows-static -DVCPKG_CRT_LINKAGE=static -DVCPKG_LIBRARY_LINKAGE=static
+          cmake --build build --config Release
+
+      - name: Cache the build
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            build
+          key: cmake-cache-${{ runner.os }}-${{ hashFiles('CMakeLists.txt') }}-v1.0.1beta
+
+      - name: Package build artifact
+        run: |
+          mkdir ${{ github.workspace }}/build/package
+          cp build/Release/*.exe ${{ github.workspace }}/build/package
+          cp ${{ github.workspace }}/sdd_config.json ${{ github.workspace }}/build/package
+          cp ${{ github.workspace }}/configpath.txt ${{ github.workspace }}/build/package
+
+      - name: Compress build artifacts
+        run: |
+          Compress-Archive -Path ${{ github.workspace }}/build/package/* -DestinationPath ${{ github.workspace }}/build/package.zip
+        shell: pwsh
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SensitiveDataDeleter
+          path: ${{ github.workspace }}/build/package.zip
+
+      - name: Create release
+        if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main'
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: v1.0.2
+          release_name: Release ${{ github.run_number }}
+          body: |
+            Changes in this Release:
+            - SDD is now built with Github Actions
+          draft: false
+          prerelease: true
+
+      - name: Upload release asset
+        id: upload-release-asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ${{ github.workspace }}/build/package.zip
+          asset_name: SensitiveDataDeleter-x64-windows-static.zip
+          asset_content_type: application/zip
