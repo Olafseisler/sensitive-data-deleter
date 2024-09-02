@@ -17,7 +17,7 @@
 #define CHUNK_SIZE (64 * 1024)
 #define MAX_NUM_MATCHES 100 // Max number of matches per file that will be stored
 #define BATCH_SIZE 10
-/
+
 
 void
 FileScanner::scanFiles(QPromise<std::map<std::string, std::pair<ScanResult, std::vector<MatchInfo>>>> &promise,
